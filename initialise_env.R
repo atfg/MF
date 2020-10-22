@@ -121,7 +121,7 @@ goi = list( cilia = c("TUBA1A", "CTH", "EZR","FOXJ1"),
 				'ZFP36L1','ZFP36L2','ZYX','GADD45G','HSPE1','IER5','KCNE4')
 ) 
 
-source("/icgc/dkfzlsdf/analysis/atfg_github/MF/functions.R")
+source("/icgc/dkfzlsdf/analysis/B210/angela/atfg_github/MF/functions.R")
 
 # module load R/3.5.2, don't have to do this, it is the default, doesn't work from inside screen
 # module load python/3.6.1 # this is required for Seurat to run
