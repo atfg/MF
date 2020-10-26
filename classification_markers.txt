@@ -1,0 +1,52 @@
+>epithelial
+expressed: EPCAM, PAEP, PAX8, MUC16
+
+>ciliated
+expressed: EZR
+subtype of: epithelial
+
+>glands
+expressed: PAEP
+not expressed: WNT7A, SVIL
+subtype of: epithelial
+
+>active glands
+expressed: FXYD2, MT1G, S100A1, MT1F
+subtype of: glands
+
+>exhausted glands
+expressed: TMEM49, XIST, CP, VMP1, NEAT1
+subtype of: glands
+
+>luminal
+expressed: WNT7A, SVIL
+subtype of: epithelial
+
+>decidualised epithelial
+expressed: PRLR, IRF1, FOXO1
+subtype of: epithelial
+
+>vaginal epithelium
+expressed: KRT4, KRT14
+subtype of: epithelial
+
+>stromal
+expressed: VIM, COL12A1, MMP11, MMP2, MMP3, CTGF
+
+>decidualised stroma
+expressed: IGFBP1, MMP9, LEFTY2, PRLR, PRL, DKK1
+subtype of: stromal
+
+>leukocytes
+expressed: PTPRC, HLA-B
+
+>T cells
+expressed: ITGAE, CD69, CXCR4, CD8A, CD8B, CD4
+subtype of: leukocytes
+
+>NK
+expressed: NCAM1, ITGAE, ITGA1, CD9, CD39
+subtype of: leukocytes
+
+>endothelial
+expressed: PECAM1, CD34, VWF
