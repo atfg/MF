@@ -2,7 +2,7 @@
 expressed: EPCAM, PAEP, PAX8, MUC16
 
 >ciliated
-expressed: EZR
+expressed: CTH, EZR, FOXJ1
 subtype of: epithelial
 
 >glands
@@ -19,15 +19,11 @@ expressed: TMEM49, XIST, CP, VMP1, NEAT1
 subtype of: glands
 
 >luminal
-expressed: WNT7A, SVIL
+expressed: WNT7A
 subtype of: epithelial
 
 >decidualised epithelial
-expressed: PRLR, IRF1, FOXO1
-subtype of: epithelial
-
->vaginal epithelium
-expressed: KRT4, KRT14
+expressed: PRLR, FOXO1
 subtype of: epithelial
 
 >stromal
