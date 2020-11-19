@@ -15,9 +15,16 @@ library("Seurat")
 #library("pagoda2")
 library("velocyto.R")
 library("RColorBrewer")
+library("dplyr")
+library("ggplot2")
+library("garnett")
+library(org.Hs.eg.db)
+#library("slingshot")
+#library("gam")
 
-library("slingshot")
-library("gam")
+#library("devtools")
+#devtools::install_github("cole-trapnell-lab/garnett")
+
 
 ###############################################################################
 # Set up some useful global variables 
@@ -47,8 +54,7 @@ goi = list( cilia = c("TUBA1A", "CTH", "EZR","FOXJ1"),
 				"ROPN1L","CCDC173","ZBBX","DNAH12","DNAH7","RSPH1","SPATA18","SPAG17","MNS1","TMEM231",
 				"LRRIQ1","IQCG","AGR3","TPPP3","FHAD1"),
 		secretory = c("PAEP", "MTHFD1","ESR1"),
-		up_glands_vs_stroma=c("CDH1","CLDN10","EPCAM","PAX8","MUC1","PAEP",
-				"KLC11","MUC20","FOXA2","SOX17","KLF5"),
+		up_glands_vs_stroma=c("CDH1","CLDN10","EPCAM","PAX8","MUC1","PAEP", "KLC11","MUC20","FOXA2","SOX17","KLF5"),
 		mucosal_secretory=c("PAX8","MUC1"),
 		glandular_products=c("PAEP","KLC11","MUC20"),
 		up_stroma_vs_gland=c("THY1","NT5E","IFITM1","COL8A1","COL12A1","COL13A1",
@@ -104,22 +110,22 @@ goi = list( cilia = c("TUBA1A", "CTH", "EZR","FOXJ1"),
 		roser_glands_exhausted = c("TMEM49","XIST","CP","VMP1","NEAT1"),
 		roser_decidual_stromal = c("DKK1"),
 		roser_spongiosa_vs_compacta = c("ACTA2"),
-		hla=c("HLA-A"),
-		dissociation_effects=c('ACTG1','ANKRD1','ARID5A','ATF3','ATF4','BAG3','BHLHE40','BRD2',
-				'BTG1','BTG2','CCNL1','CCRN4L','CEBPB','CEBPD','CEBPG','CSRNP1','CXCL1','CYR61',
-				'DCN','DDX3X','DDX5','DES','DNAJA1','DNAJB1','DNAJB4','DUSP1','DUSP8','EGR1','EGR2',
-				'EIF1','EIF5','ERF','ERRFI1','FAM132B','FOS','FOSB','FOSL2','GADD45A','GCC1','GEM',
-				'H3F3B','HIPK3','HSP90AA1','HSP90AB1','HSPA1A','HSPA1B','HSPA5','HSPA8','HSPB1',
-				'HSPH1','ID3','IDI1','IER2','IER3 ','IFRD1','IL6','IRF1','IRF8','ITPKC','JUN','JUNB',
-				'JUND','KLF2','KLF4','KLF6','KLF9','LITAF','LMNA','MAFF','MAFK','MCL1','MIDN',
-				'MIR22HG','MT1','MT2','MYADM','MYC','MYD88','NCKAP5L','NCOA7','NFKBIA','NFKBIZ',
-				'NOP58','NPPC','NR4A1','ODC1','OSGIN1','OXNAD1','PCF11','PDE4B','PER1','PHLDA1',
-				'PNP','PNRC1','PPP1CC','PPP1R15A','PXDC1','RAP1B','RASSF1','RHOB','RHOH','RIPK1',
-				'SAT1','SBNO2','SDC4','SERPINE1','SKIL','SLC10A6','SLC38A2','SLC41A1','SOCS3','SQSTM1',
-				'SRF','SRSF5','SRSF7','STAT3','TAGLN2','TIPARP','TNFAIP3','TNFAIP6','TPM3','TPPP3',
-				'TRA2A','TRA2B','TRIB1','TUBB4B','TUBB6','UBC','USP2','WAC','ZC3H12A','ZFAND5','ZFP36',
-				'ZFP36L1','ZFP36L2','ZYX','GADD45G','HSPE1','IER5','KCNE4')
+		hla=c("HLA-A")
 ) 
+dissociation_effects=c('ACTG1','ANKRD1','ARID5A','ATF3','ATF4','BAG3','BHLHE40','BRD2',
+		'BTG1','BTG2','CCNL1','CCRN4L','CEBPB','CEBPD','CEBPG','CSRNP1','CXCL1','CYR61',
+		'DCN','DDX3X','DDX5','DES','DNAJA1','DNAJB1','DNAJB4','DUSP1','DUSP8','EGR1','EGR2',
+		'EIF1','EIF5','ERF','ERRFI1','FAM132B','FOS','FOSB','FOSL2','GADD45A','GCC1','GEM',
+		'H3F3B','HIPK3','HSP90AA1','HSP90AB1','HSPA1A','HSPA1B','HSPA5','HSPA8','HSPB1',
+		'HSPH1','ID3','IDI1','IER2','IER3 ','IFRD1','IL6','IRF1','IRF8','ITPKC','JUN','JUNB',
+		'JUND','KLF2','KLF4','KLF6','KLF9','LITAF','LMNA','MAFF','MAFK','MCL1','MIDN',
+		'MIR22HG','MT1','MT2','MYADM','MYC','MYD88','NCKAP5L','NCOA7','NFKBIA','NFKBIZ',
+		'NOP58','NPPC','NR4A1','ODC1','OSGIN1','OXNAD1','PCF11','PDE4B','PER1','PHLDA1',
+		'PNP','PNRC1','PPP1CC','PPP1R15A','PXDC1','RAP1B','RASSF1','RHOB','RHOH','RIPK1',
+		'SAT1','SBNO2','SDC4','SERPINE1','SKIL','SLC10A6','SLC38A2','SLC41A1','SOCS3','SQSTM1',
+		'SRF','SRSF5','SRSF7','STAT3','TAGLN2','TIPARP','TNFAIP3','TNFAIP6','TPM3','TPPP3',
+		'TRA2A','TRA2B','TRIB1','TUBB4B','TUBB6','UBC','USP2','WAC','ZC3H12A','ZFAND5','ZFP36',
+		'ZFP36L1','ZFP36L2','ZYX','GADD45G','HSPE1','IER5','KCNE4')
 
 source("/icgc/dkfzlsdf/analysis/B210/angela/atfg_github/MF/functions.R")
 

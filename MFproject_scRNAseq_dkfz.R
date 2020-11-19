@@ -6,7 +6,7 @@
 
 # this loads up libraries, sets up some global varibles and functions 
 # and loads up the seurat objects created by Luca so takes a few minutes to run
-source("/icgc/dkfzlsdf/analysis/B210/lab_github/Umay/initialise_env.R")
+source("/icgc/dkfzlsdf/analysis/B210/angela/atfg_github/MF/initialise_env.R")
 
 samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM") 
 #"MFCON020afM","MFCON007dfM" are failed samples
@@ -115,9 +115,152 @@ lines(sg, lwd=2, col='black')
 legend("bottomright",legend=names(colkey),fill=colkey)
 dev.off()
 
+###############################################################################
+# cell bender, failed samples
+###############################################################################
+sample = "MFCON007dfM"
+i = which(datamap$sample_full == sample)
+file = paste(datamap$base_dir[i],"outs/raw_gene_bc_matrices/GRCh38/cellbender_matrix_filtered.h5", sep="")
+dat = Read10X_h5(filename = file, use.names = TRUE)
+bseu = CreateSeuratObject(counts = dat)
+rm(dat)
+gc()
+
+bseu = SCTransform(bseu, verbose = TRUE)
+bseu = RunPCA(bseu, verbose = TRUE)
+bseu = RunUMAP(bseu, dims = 1:30, verbose = TRUE)
+bseu = FindNeighbors(bseu, dims = 1:30, verbose = TRUE)
+bseu = FindClusters(bseu, verbose = TRUE, resolution=0.2)
+
+bseu@meta.data$donor = datamap$sample_full[i]
+bseu = PercentageFeatureSet(bseu, pattern = "^MT-", col.name="percent.mt" )
+
+markers = FindAllMarkers(bseu, verbose = TRUE)
+seu = bseu
+rm(bseu)
+gc()
+
+file = paste("scrna_umaps_cellbender_", sample, ".pdf", sep="" )
+pdf(file, width=6, height=6 )
+a = data.frame( Embeddings(seu[["umap"]]), seu@meta.data ) 
+p = ggplot( a, aes(UMAP_1,UMAP_2, color=seurat_clusters) ) + geom_point(alpha=0.3, shape=20) + theme_bw() 
+print(p)
+mks = unique(unlist(goi))
+mks = mks[ mks %in% rownames(seu)]
+for( i in 1:length(mks) ) {
+	mk = mks[i]
+	p = FeaturePlot(seu, features = mk)
+	print(p)
+}
+dev.off()
+
 
 ###############################################################################
-# cell bender
+# cell bender, sample by sample
+###############################################################################
+seu = get_single_sample_cellbender_seurats( samples, update=F)[[1]]
+aqc = get_cellranger_qc_output()
+aqc$cellbender_number_cells = sapply( seu, ncol )
+
+# plot UMAPs colored by cluster and GOI
+for( name in names(seu) ) {
+	cat("\tat",name,"\n")
+	file = paste("scrna_umaps_cellbender_", name, ".pdf", sep="" )
+	pdf(file, width=6, height=6 )
+	a = data.frame( Embeddings(seu[[name]][["umap"]]), seu[[name]]@meta.data ) 
+	p = ggplot( a, aes(UMAP_1,UMAP_2, color=seurat_clusters) ) + geom_point(alpha=0.3, shape=20) + theme_bw() 
+	print(p)
+	mks = unique(unlist(goi))
+	mks = mks[ mks %in% rownames(seu[[name]])]
+	for( i in 1:length(mks) ) {
+		mk = mks[i]
+		p = FeaturePlot(seu[[name]], features = mk)
+		print(p)
+	}
+	dev.off()
+}
+
+# QC plots
+file = paste("scrna_cellbender_qc.pdf", sep="" )
+pdf(file, width=6, height=6 )
+for( name in names(seu) ) {
+	cat("\tat",name,"\n")
+	a = data.frame( seu[[name]]@meta.data ) 
+	p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=name) 
+	print(p)
+	a = a[ a$nCount_RNA < quantile(a$nCount_RNA,probs=seq(0,1,0.01))[99] & 
+					a$nFeature_RNA < quantile(a$nFeature_RNA,probs=seq(0,1,0.01))[99] &
+					a$percent.mt < 30 &
+					a$nFeature_RNA > 50,]
+	p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=name) 
+	print(p)
+	p = ggplot( a, aes(nFeature_SCT,nCount_SCT, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=name) 
+	print(p)
+}
+dev.off()
+
+
+###############################################################################
+# cell bender, integrated
+###############################################################################
+a = get_integrated_cellbender_seurat()
+iseu = a[[1]]
+imarkers = a[[2]]
+rm(a)
+gc()
+
+a = c()
+for( name in names(seu) ) {
+	a = rbind(a,seu[[name]]@meta.data)
+}
+
+iseu@meta.data$donor = names(seu)[as.numeric(sapply(strsplit(colnames(iseu),"_"),"[[",2))]
+
+
+file = paste("scrna_umaps_cellbender_integrated_clusters.pdf", sep="" )
+pdf(file, width=6, height=6 )
+a = data.frame( Embeddings(iseu[["umap"]]), iseu@meta.data ) 
+ggplot( a, aes(UMAP_1,UMAP_2, color=seurat_clusters) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+ggplot( a, aes(UMAP_1,UMAP_2, color=donor) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+for( cluster in unique(markers$cluster) ) {
+	cat("\tat",cluster,"\n")
+	mks = markers[ markers$cluster == cluster, ]
+	for( i in 1:min(10,nrow(mks)) ) {
+		mk = mks[i,"gene"]
+		p = FeaturePlot(iseu, features = mk)
+		print(p)
+	}
+}
+dev.off()
+
+file = paste("scrna_umaps_cellbender_integrated.pdf", sep="" )
+pdf(file, width=6, height=6 )
+mks = unique(unlist(goi))
+mks = mks[ mks %in% rownames(iseu)]
+for( i in 1:length(mks) ) {
+	mk = mks[i]
+	p = FeaturePlot(iseu, features = mk)
+	print(p)
+}
+dev.off()
+
+###############################################################################
+# garnett
+###############################################################################
+
+cds = to_cds( seu[["MFCON007dcM"]])
+
+marker_check = check_markers(cds, "/icgc/dkfzlsdf/analysis/B210/angela/atfg_github/MF/classification_markers.txt", 
+		db=org.Hs.eg.db, cds_gene_id_type = "SYMBOL", marker_file_gene_id_type = "SYMBOL")
+
+file = paste("garnett_check_markers.pdf", sep="" )
+pdf(file, width=6, height=12 )
+plot_markers(marker_check)
+dev.off()
+
+
+###############################################################################
+# load Roser's data
 ###############################################################################
 
 
