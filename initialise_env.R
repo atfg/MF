@@ -18,10 +18,12 @@ library("RColorBrewer")
 library("dplyr")
 library("ggplot2")
 library("garnett")
-library(org.Hs.eg.db)
+library("org.Hs.eg.db")
+library("rhdf5")
 #library("slingshot")
 #library("gam")
 
+#BiocManager::install("")
 #library("devtools")
 #devtools::install_github("cole-trapnell-lab/garnett")
 
@@ -136,4 +138,17 @@ source("/icgc/dkfzlsdf/analysis/B210/angela/atfg_github/MF/functions.R")
 # BiocManager::install("pcaMethods")
 # library(devtools)
 # install_github("velocyto-team/velocyto.R")
+
+cols1 = c("#961D4E","#4C6085","#FCB97D","#F1DA87","#BEC06B")
+names(cols1) = c("epithelial","stromal","leukocytes","endothelial","smooth muscle")
+cols1_scale = scale_color_manual(breaks=names(cols1), values=cols1)
+cols1_fill = scale_fill_manual(breaks=names(cols1), values=cols1)
+
+cols2 = c("#961D4E","#CE84AD","#661431","#FCB97D","#93B5C6","#4C6085","#2D394E")
+names(cols2) = c("glands","exhausted glands","cilliated glands","T-cells","decidualised stroma","stroma/mesenchyme","smooth muscle")
+cols2_scale = scale_color_manual(breaks=names(cols2), values=cols2)
+cols2_fill = scale_fill_manual(breaks=names(cols2), values=cols2)
+
+# ordered list
+types_level2 = c("exhausted glands","glands","cilliated glands","decidualised stroma","stroma/mesenchyme","smooth muscle","T-cells")
 

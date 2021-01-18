@@ -1,7 +1,7 @@
 ###############################################################################
 # Angela's reminders for starting jobs, ignore this comment block: 
 # bsub -R "rusage[mem=20GB]" -Is bash 
-# module load python/3.7.0 anaconda3/2019.07 libpng/1.6.37 hdf5/1.8.18 python/3.6.1 gdal/3.0.2 R/4.0.0; R
+# module load python/3.7.0 anaconda3/2019.07 libpng/1.6.37 hdf5/1.8.18 python/3.6.1 gdal/3.0.2 R/4.0.0; module switch R R/4.0.0; R
 ###############################################################################
 
 # this loads up libraries, sets up some global varibles and functions 
@@ -156,16 +156,24 @@ dev.off()
 
 
 ###############################################################################
-# cell bender, sample by sample
+# cellbender, plots sample by sample
 ###############################################################################
-seu = get_single_sample_cellbender_seurats( samples, update=F)[[1]]
-aqc = get_cellranger_qc_output()
+samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
+samples = c("MFCON007dcM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020acM")  #"MFCON020afM","MFCON007dfM"
+samples = c("MFCON007dcM","MFCON007dfM") 
+a = get_single_sample_cellbender_seurats( samples, update=F)
+seu = a[[1]]
+markers = a[[2]]
+rm(a)
+gc()
+aqc = get_cellranger_qc_output( samples )
 aqc$cellbender_number_cells = sapply( seu, ncol )
 
 # plot UMAPs colored by cluster and GOI
 for( name in names(seu) ) {
 	cat("\tat",name,"\n")
 	file = paste("scrna_umaps_cellbender_", name, ".pdf", sep="" )
+	
 	pdf(file, width=6, height=6 )
 	a = data.frame( Embeddings(seu[[name]][["umap"]]), seu[[name]]@meta.data ) 
 	p = ggplot( a, aes(UMAP_1,UMAP_2, color=seurat_clusters) ) + geom_point(alpha=0.3, shape=20) + theme_bw() 
@@ -177,64 +185,65 @@ for( name in names(seu) ) {
 		p = FeaturePlot(seu[[name]], features = mk)
 		print(p)
 	}
+	for( cluster in unique(markers[[name]]$cluster) ) {
+		cat("\tat",cluster,"\n")
+		mks = markers[[name]][ markers[[name]]$cluster == cluster, ]
+		for( i in 1:min(10,nrow(mks)) ) {
+			mk = mks[i,"gene"]
+			p = FeaturePlot(seu[[name]], features = mk)
+			print(p)
+		}
+	}
 	dev.off()
 }
 
-# QC plots
-file = paste("scrna_cellbender_qc.pdf", sep="" )
-pdf(file, width=6, height=6 )
-for( name in names(seu) ) {
-	cat("\tat",name,"\n")
-	a = data.frame( seu[[name]]@meta.data ) 
-	p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=name) 
-	print(p)
-	a = a[ a$nCount_RNA < quantile(a$nCount_RNA,probs=seq(0,1,0.01))[99] & 
-					a$nFeature_RNA < quantile(a$nFeature_RNA,probs=seq(0,1,0.01))[99] &
-					a$percent.mt < 30 &
-					a$nFeature_RNA > 50,]
-	p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=name) 
-	print(p)
-	p = ggplot( a, aes(nFeature_SCT,nCount_SCT, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=name) 
-	print(p)
-}
-dev.off()
-
 
 ###############################################################################
-# cell bender, integrated
+# cellbender, integrated
 ###############################################################################
-a = get_integrated_cellbender_seurat()
+samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
+samples = c("MFCON007dcM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020acM") 
+samples = c("MFCON007dcM","MFCON010dfM") 
+samples = c("MFCON007dcM","MFCON007dfM") 
+a = get_integrated_cellbender_seurat( samples, update=F )
 iseu = a[[1]]
 imarkers = a[[2]]
 rm(a)
 gc()
 
-a = c()
-for( name in names(seu) ) {
-	a = rbind(a,seu[[name]]@meta.data)
-}
-
 iseu@meta.data$donor = names(seu)[as.numeric(sapply(strsplit(colnames(iseu),"_"),"[[",2))]
+iseu@meta.data$type = "flow"
+iseu@meta.data$type[substr( iseu@meta.data$sample, 10, 10) == "c"] = "clumps"
+for( res in c(0.1,0.4,0.6,0.8,1) ) {
+	iseu = FindClusters(iseu, verbose = TRUE, resolution=res)
+}
+iseu@meta.data$cell_type_level1 = NA
+ind = as.character(iseu@meta.data$integrated_snn_res.0.2)
+iseu@meta.data$cell_type_level1[ind %in% c("0","1","5")] = "epithelial"
+iseu@meta.data$cell_type_level1[ind %in% c("2","3","4")] = "stromal"
+iseu@meta.data$cell_type_level1[ind %in% c("6")] = "leukocytes"
+
+iseu@meta.data$cell_type_level2 = NA
+ind = as.character(iseu@meta.data$integrated_snn_res.0.2)
+iseu@meta.data$cell_type_level2[ind == "0"] = "glands"
+iseu@meta.data$cell_type_level2[ind == "1"] = "exhausted glands"
+iseu@meta.data$cell_type_level2[ind == "5"] = "cilliated glands"
+iseu@meta.data$cell_type_level2[ind == "2"] = "decidualised stroma"
+iseu@meta.data$cell_type_level2[ind == "3"] = "stroma/mesenchyme"
+iseu@meta.data$cell_type_level2[ind == "4"] = "smooth muscle"
+iseu@meta.data$cell_type_level2[ind == "6"] = "T-cells"
 
 
-file = paste("scrna_umaps_cellbender_integrated_clusters.pdf", sep="" )
+file = paste("scrna_umaps_cellbender_integrated_clusters_", paste(samples,collapse="_"), ".pdf", sep="" )
 pdf(file, width=6, height=6 )
 a = data.frame( Embeddings(iseu[["umap"]]), iseu@meta.data ) 
-ggplot( a, aes(UMAP_1,UMAP_2, color=seurat_clusters) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
-ggplot( a, aes(UMAP_1,UMAP_2, color=donor) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
-for( cluster in unique(markers$cluster) ) {
-	cat("\tat",cluster,"\n")
-	mks = markers[ markers$cluster == cluster, ]
-	for( i in 1:min(10,nrow(mks)) ) {
-		mk = mks[i,"gene"]
-		p = FeaturePlot(iseu, features = mk)
-		print(p)
-	}
-}
-dev.off()
-
-file = paste("scrna_umaps_cellbender_integrated.pdf", sep="" )
-pdf(file, width=6, height=6 )
+ggplot( a, aes(UMAP_1,UMAP_2, color=integrated_snn_res.0.1) ) + geom_point(alpha=0.3, shape=20) + theme_bw() 
+ggplot( a, aes(UMAP_1,UMAP_2, color=integrated_snn_res.0.2) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+ggplot( a, aes(UMAP_1,UMAP_2, color=integrated_snn_res.0.4) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+ggplot( a, aes(UMAP_1,UMAP_2, color=integrated_snn_res.0.6) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+ggplot( a, aes(UMAP_1,UMAP_2, color=integrated_snn_res.1) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+ggplot( a, aes(UMAP_1,UMAP_2, color=sample) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
+ggplot( a, aes(UMAP_1,UMAP_2, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw()
 mks = unique(unlist(goi))
 mks = mks[ mks %in% rownames(iseu)]
 for( i in 1:length(mks) ) {
@@ -242,7 +251,35 @@ for( i in 1:length(mks) ) {
 	p = FeaturePlot(iseu, features = mk)
 	print(p)
 }
+for( cluster in unique(imarkers$cluster) ) {
+	cat("\tat",cluster,"\n")
+	mks = imarkers[ imarkers$cluster == cluster & imarkers$p_val < 0.1 & imarkers$avg_logFC > 0 & imarkers$in_goi, ]
+	for( i in 1:nrow(mks) ) {
+		mk = mks[i,"gene"]
+		p = FeaturePlot(iseu, features = mk)
+		print(p)
+	}
+}
 dev.off()
+
+imarkers$in_goi = imarkers$gene %in% unlist(goi)
+		
+pdf("temp.pdf", width=6, height=6 )
+a = data.frame( Embeddings(iseu[["umap"]]), iseu@meta.data ) 
+ggplot( a, aes(UMAP_1,UMAP_2, color=cell_type_level1) ) + geom_point(alpha=0.4, shape=20) + theme_bw() + cols1_scale
+ggplot( a, aes(UMAP_1,UMAP_2, color=cell_type_level2) ) + geom_point(alpha=0.4, shape=20) + theme_bw() + cols2_scale
+library("reshape")
+b = sapply( split( factor(a$cell_type_level2), a$sample ), table )
+b = t(apply(b,2,function(x){ x/sum(x)}))
+sample_order = names(sort(rowSums(b[,grepl("glands",colnames(b))]),decreasing=T))
+sample_order = substring(sample_order,7,10)
+b = melt(b)
+b$X1 = substring(b$X1,7,10)
+b$X1 = factor(b$X1,levels=sample_order,ordered=T)
+b$X2 = factor(b$X2,levels=rev(types_level2),ordered=T)
+ggplot( b, aes(X1,value,fill=X2) ) + geom_bar(stat="identity") + theme_bw() + cols2_fill + xlab("sample") + ylab("fraction")
+dev.off()
+
 
 ###############################################################################
 # garnett
@@ -260,7 +297,106 @@ dev.off()
 
 
 ###############################################################################
-# load Roser's data
+# load Quake data
+###############################################################################
+samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
+a = get_integrated_cellbender_seurat( samples, update=F )
+iseu = a[[1]]
+rm(a)
+gc()
+iseu@meta.data$donor = names(seu)[as.numeric(sapply(strsplit(colnames(iseu),"_"),"[[",2))]
+iseu@meta.data$type = "flow"
+iseu@meta.data$type[substr( iseu@meta.data$sample, 10, 10) == "c"] = "clumps"
+iseu@meta.data$cell_type_level1 = NA
+ind = as.character(iseu@meta.data$integrated_snn_res.0.2)
+iseu@meta.data$cell_type_level1[ind %in% c("0","1","5")] = "epithelial"
+iseu@meta.data$cell_type_level1[ind %in% c("2","3","4")] = "stromal"
+iseu@meta.data$cell_type_level1[ind %in% c("6")] = "leukocytes"
+
+iseu@meta.data$cell_type_level2 = NA
+ind = as.character(iseu@meta.data$integrated_snn_res.0.2)
+iseu@meta.data$cell_type_level2[ind == "0"] = "glands"
+iseu@meta.data$cell_type_level2[ind == "1"] = "exhausted glands"
+iseu@meta.data$cell_type_level2[ind == "5"] = "cilliated glands"
+iseu@meta.data$cell_type_level2[ind == "2"] = "decidualised stroma"
+iseu@meta.data$cell_type_level2[ind == "3"] = "stroma/mesenchyme"
+iseu@meta.data$cell_type_level2[ind == "4"] = "smooth muscle"
+iseu@meta.data$cell_type_level2[ind == "6"] = "T-cells"
+
+a = get_integrated_mf_quake()
+seu.integrated = a[[1]]
+markers = a[[2]]
+rm(a)
+gc()
+
+a = data.frame( Embeddings(seu.integrated[["umap"]]), seu.integrated@meta.data ) 
+a$type = "biopsy"
+a$type[is.na( a$donor)] = "mf"
+b = rownames(seu.integrated@meta.data)
+nn = b
+nn[grepl("_6",b)] = sub("_6","_1",b[grepl("_6",b)])
+nn[grepl("_7",b)] = sub("_7","_2",b[grepl("_7",b)])
+nn[grepl("_8",b)] = sub("_8","_4",b[grepl("_8",b)])
+nn[grepl("_9",b)] = sub("_9","_5",b[grepl("_9",b)])
+nn[grepl("_4",b)] = sub("_4","_6",b[grepl("_4",b)])
+nn[grepl("_5",b)] = sub("_5","_7",b[grepl("_5",b)])
+rownames(a) = nn
+mfm = iseu@meta.data
+mfm = mfm[ mfm$sample != "MFCON018bfM",]
+a$cell_type[match(rownames(mfm),rownames(a))] = mfm$cell_type_level1
+a$donor[match(rownames(mfm),rownames(a))] = mfm$sample
+a$cell_type_level1[grepl("Ciliated|cilliated|epithelial|epithelia|glands",a$cell_type)] = "epithelial"
+a$cell_type_level1[grepl("Stroma|stroma",a$cell_type)] = "stromal"
+a$cell_type_level1[grepl("Lymphocytes|Macrophages|T-cells",a$cell_type)] = "leukocytes"
+a$cell_type_level1[grepl("Endothelia",a$cell_type)] = "endothelial"
+a$cell_type_level1[grepl("muscle",a$cell_type)] = "smooth muscle"
+table(a$cell_type)
+table(a$cell_type_level1)
+
+pdf("temp.pdf", width=2*6, height=6 )
+ggplot(a,aes(UMAP_1,UMAP_2,color=integrated_snn_res.0.2)) + geom_point() + theme_bw()
+ggplot(a,aes(UMAP_1,UMAP_2,color=cell_type_level1)) + geom_point() + theme_bw() + cols1_scale
+ggplot(a,aes(UMAP_1,UMAP_2,color=cell_type_level1)) + geom_point() + theme_bw() + facet_wrap( ~ type ) + cols1_scale
+ggplot(a,aes(UMAP_1,UMAP_2,color=donor)) + geom_point() + theme_bw()
+dev.off()
+
+ct = unique(a$cell_type_level1)[1]
+tt = data.frame(rowSums(seu.integrated[["RNA"]]@counts[,a$cell_type_level1 == ct & a$type == "biopsy"]),
+		rowSums(seu.integrated[["RNA"]]@counts[,a$cell_type_level1 == ct & a$type == "mf"]))
+colnames(tt) = c(paste(ct,"_biopsy",sep=""),paste(ct,"_mf",sep=""))
+dat = tt
+for( ct in unique(a$cell_type_level1)[-1] ) {
+	tt = data.frame(rowSums(seu.integrated[["RNA"]]@counts[,a$cell_type_level1 == ct & a$type == "biopsy"]),
+			rowSums(seu.integrated[["RNA"]]@counts[,a$cell_type_level1 == ct & a$type == "mf"]))
+	colnames(tt) = c(paste(ct,"_biopsy",sep=""),paste(ct,"_mf",sep=""))
+	dat = cbind(dat,tt)
+}
+dat = dat[,colSums(dat)>0]
+dat = dat[(rowSums(dat[,grepl("mf",colnames(dat))]) > 0) & (rowSums(dat[,grepl("biopsy",colnames(dat))]) > 0),]
+dat = log10(dat+1)
+cm = cor(dat,method="spearman")
+
+tab = cm[c("stromal_mf","epithelial_mf","leukocytes_mf"),c("stromal_biopsy","epithelial_biopsy","leukocytes_biopsy")] #,"smooth muscle_biopsy","endothelial_biopsy")]
+#tab = apply(tab,1,function(x) { (x-mean(x))/sd(x) } )
+#tab = t(tab)
+tab = melt(tab)
+tab = as.data.frame(tab)
+tab$X1 = factor(tab$X1,levels=c("epithelial_mf","stromal_mf","leukocytes_mf"),ordered=T)
+tab$X2 = factor(tab$X2,levels=c("epithelial_biopsy","stromal_biopsy","leukocytes_biopsy","endothelial_biopsy","smooth muscle_biopsy"),ordered=T)
+
+pdf("temp.pdf", width=2*6, height=6 )
+ggplot(tab,aes(X2,X1,fill=value)) + geom_tile() + theme_bw() + scale_fill_distiller()
+dev.off()
+
+ggplot(dat,aes(stromal_biopsy,stromal_mf)) + geom_point() + theme_bw()
+ggplot(dat,aes(stromal_biopsy,epithelial_mf)) + geom_point() + theme_bw()
+ggplot(dat,aes(stromal_biopsy,leukocytes_mf)) + geom_point() + theme_bw()
+dev.off()
+
+#cp /icgc/dkfzlsdf/analysis/B210/angela/mf/human_endometrium_quake.RData /icgc/dkfzlsdf/analysis/OE0538_projects/DO-0002/human_endometrium_quake_seurat_sct_by_donor.RData
+
+###############################################################################
+# 
 ###############################################################################
 
 

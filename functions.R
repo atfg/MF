@@ -67,7 +67,7 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 	seu = list()
 	markers = list()
 	for( i in 1:nrow(dm) ) {
-		cat("\tat",i,"\n")
+		cat("\tat",dm$sample_full[i],"\n")
 		
 		filename = paste(dm$base_dir[i],"outs/raw_gene_bc_matrices/GRCh38/cellbender_seurat.RData",sep="" )
 		if( !file.exists(filename) | update ) {	
@@ -80,11 +80,18 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 			bseu@meta.data$sample = dm$sample_full[i]
 			bseu = PercentageFeatureSet(bseu, pattern = "^MT-", col.name="percent.mt" )
 			
+			file = paste("scrna_cellbender_qc_", dm$sample_full[i], ".pdf", sep="" )
+			pdf(file, width=6, height=6 )
+			
+			# filter cells 
 			a = data.frame( bseu@meta.data ) 
+			p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=paste("before filtering",name)) 
+			print(p)
+			
 			ind = a$nCount_RNA < quantile(a$nCount_RNA,probs=seq(0,1,0.01))[99] & 
 					a$nFeature_RNA < quantile(a$nFeature_RNA,probs=seq(0,1,0.01))[99] &
-					a$percent.mt < 30 &
-					a$nFeature_RNA > 50
+					a$percent.mt < 10 &
+					a$nFeature_RNA > 100
 			bseu = bseu[,ind]
 			
 			bseu = SCTransform(bseu, verbose = TRUE)
@@ -93,20 +100,29 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 			bseu = FindNeighbors(bseu, dims = 1:30, verbose = TRUE)
 			bseu = FindClusters(bseu, verbose = TRUE, resolution=0.2)
 			
-			markers[[dm$sample_full[i]]] = FindAllMarkers(bseu, verbose = TRUE)
-			seu[[dm$sample_full[i]]] = bseu
-				
-			rm(bseu)
-			gc()
-			save(seu,markers,file=filename)
+			bmarkers = FindAllMarkers(bseu, verbose = TRUE)
+			
+			a = data.frame( bseu@meta.data )
+			p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=paste("after filtering",name)) 
+			print(p)
+			dev.off()
+			
+			save(bseu,bmarkers,file=filename)
 			cat("\tsaved to",filename,"\n")
 		} else{
 			cat("\tloading from", filename, "\n")
 			load(filename)
 		}
+		markers[[dm$sample_full[i]]] = bmarkers
+		seu[[dm$sample_full[i]]] = bseu
+		rm(bseu)
+		rm(bmarkers)
+		gc()
 	}
 	
-	# manual annotation of cell types
+	return(list(seu,markers))
+}
+# manual annotation of cell types
 #	name = "MFCON007efM"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual = NA
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(0,4)] = "epithelial"
@@ -124,9 +140,7 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(0)] = "epithelial"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(3)] = "stromal"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters == 4] = "leukocytes"
-	
-	return(list(seu,markers))
-}
+
 
 to_cds <- function(seud) {
 	pd = new("AnnotatedDataFrame", data = seud@meta.data)
@@ -136,13 +150,44 @@ to_cds <- function(seud) {
 	cds = estimateSizeFactors(cds)
 }
 
-get_human_data <- function() {
-	file = "endometrium_all_seurat.RData"
+get_human_data <- function( sample ) {
+	file = paste("human_endometrium_normalised_individual_",sample,".RData",sep="")
 	
 	if( !file.exists(file) ) {
-		filename = "/icgc/dkfzlsdf/analysis/B210/data/sanger_human_endometrium/endometrium_all.h5ad"
-		dat = Read10X_h5(filename, use.names = TRUE, unique.features = TRUE)
+		bseu = get_raw_human_data( sample ) 
+		bseu = PercentageFeatureSet(bseu, pattern = "^MT-", col.name="percent.mt" )
+		bseu = SCTransform(bseu, verbose = TRUE)
+		bseu = RunPCA(bseu, verbose = TRUE)
+		bseu = RunUMAP(bseu, dims = 1:30, verbose = TRUE)
+		bseu = FindNeighbors(bseu, dims = 1:30, verbose = TRUE)
+		bseu = FindClusters(bseu, verbose = TRUE, resolution=0.2)
+		bmarkers = FindAllMarkers(bseu, verbose = TRUE)
 		
+		save(bseu, bmarkers, file=file)
+		cat("\tsaved to",file,"\n")
+	} else {
+		cat("\tloading from",file,"\n")
+		load(file)
+	}
+	
+}
+
+get_raw_human_data <- function( samples=c("A10","A13") ) {
+	file = "endometrium_all_seurat.RData"
+	
+	for( sample in samples ) {
+		filename = paste("human_endometrium_individual_",sample,".RData",sep="")
+		load(filename)
+		
+	}
+	
+	if( !file.exists(file) ) {
+		cat("reading 10x data\n")
+		filename = "/icgc/dkfzlsdf/analysis/B210/data/sanger_human_endometrium/endometrium_all.h5ad"
+		
+		#dat = Read10X_h5(filename, use.names = TRUE, unique.features = TRUE)
+		
+		# doesn't work on R 4.0.0 but works on R 3.5.2, problem with the rhdf5 library
 		meta = h5read( filename, "/obs" )
 		rownames(meta) = meta$index
 		var = h5read( filename, "/var" )
@@ -159,26 +204,179 @@ get_human_data <- function() {
 		meta$rvt_UMAP2 = rvt_umap$X_umap[2,]
 		rm(rvt_umap)
 		
+		ind = meta$treatment == "C" & meta$clinical == "U" & meta$location == "ENMY"
+		meta = meta[ind,]
+		counts = counts[,ind]
+		gc()
+		
+		for( individual in unique(meta$individual) ) {
+			filename = paste("human_endometrium_individual_",individual,".RData",sep="")
+			
+			cat("creating seurat object\n")
+			ind = meta$individual == individual
+			seu = CreateSeuratObject( counts[,ind], project = "HumanBiopsies", assay = "RNA", min.cells = 0, 
+					min.features = 0, names.field = 1, names.delim = "_", meta.data = meta[ind,] )
+			cat("saving to", filename,"\n")
+			save(seu,file=filename)	
+			rm(seu)
+		}
+		
+		cat("creating seurat object\n")
 		seu = CreateSeuratObject( counts, project = "HumanBiopsies", assay = "RNA", min.cells = 0, 
 				min.features = 0, names.field = 1, names.delim = "_", meta.data = meta )
+		cat("saving to", file,"\n")
 		save(seu,file=file)
 	} else {
+		cat("loading from", file,"\n")
 		load(file)
 	}
 	return(seu)
 }
 
+get_single_sample_human_data_quake <- function() {
+	filename = "human_endometrium_quake.RData"
+	
+	if( !file.exists(filename) ) {
+		qseu = readRDS("/icgc/dkfzlsdf/analysis/B210/references_data/GSE111976_ct_endo_10x.rds")
+		meta = read.table("/icgc/dkfzlsdf/analysis/B210/references_data/GSE111976_summary_10x_day_donor_ctype.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
+		rownames(meta) = meta$X
+		meta = meta[,-1]
+		phase = read.table("/icgc/dkfzlsdf/analysis/B210/references_data/GSE111976_summary_10x_donor_phase.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
+		meta$phase = phase[match(meta$donor,phase$donor),"phase_canonical"]
+		meta$donor = as.character(meta$donor)
+		
+		seu = list()
+		for( donor in unique(meta$donor) ) {
+			cat( "\tat", donor, "\n" )
+			seu[[donor]] = CreateSeuratObject( qseu[,meta$donor == donor], 
+					project = "HumanBiopsies", assay = "RNA", min.cells = 0, min.features = 0,
+					names.field = 1, names.delim = "_", 
+					meta.data = meta[meta$donor == donor,] )
+			seu[[donor]] = PercentageFeatureSet(seu[[donor]], pattern = "^MT-", col.name="percent.mt" )
+			seu[[donor]] = SCTransform(seu[[donor]], verbose = TRUE)
+		}
+		
+		for( donor in unique(meta$donor) ) {
+			seu[[donor]] = RunPCA(seu[[donor]], verbose = TRUE)
+			seu[[donor]] = RunUMAP(seu[[donor]], dims = 1:30, verbose = TRUE)
+		}
+		
+		for( donor in unique(meta$donor) ) {
+			bseu = seu[[donor]]
+			save(bseu,file=paste("human_endometrium_quake_",donor,".RData",sep=""))
+		}
+		
+		cat("\tsaving to", filename,"\n")
+		save( seu, file=filename )
+	} else {
+		cat("\tloading from", filename,"\n")
+		load(filename)
+	}
+	
+	return(seu)
+}
 
-# CCA
-get_integrated_cellbender_seurat <- function() {
-	filename = "integrated_cellbender_seurat.RData"
+get_integrated_mf_quake <- function() {
+	filename = "integrated_mf_quake.RData"
+	filename2 = "integrated_mf_quake_markers.RData"
+	
+	if( !file.exists(filename) ) {
+		qsamples = c("57","19","63")
+		qseu = get_single_sample_human_data_quake()
+		qseu = qseu[qsamples]
+		
+		samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON020afM","MFCON007dfM") 
+		mseu = get_single_sample_cellbender_seurats( samples )[[1]]
+		
+		seu = c(qseu,mseu)
+		seu = seu[c(qsamples,samples)]
+		rm(qseu)
+		rm(mseu)
+		
+		seu.features = SelectIntegrationFeatures(object.list = seu, nfeatures = 3000)
+		
+		cat("\tpreping integration\n")
+		seu = PrepSCTIntegration(object.list = seu, anchor.features = seu.features, verbose = TRUE)
+		
+		cat("\tfinding anchors\n")
+		seu.anchors = FindIntegrationAnchors(object.list = seu, normalization.method = "SCT", anchor.features = seu.features, 
+				reference = which(names(seu) == "19"),verbose = TRUE)
+		
+		cat("\tintegrating\n")
+		seu.integrated = IntegrateData(anchorset = seu.anchors, normalization.method = "SCT", verbose = TRUE)
+		
+		seu.integrated = RunPCA(seu.integrated, verbose = TRUE)
+		seu.integrated = RunUMAP(seu.integrated, dims = 1:30)
+		
+		seu.integrated = FindNeighbors(seu.integrated, dims = 1:30, verbose = TRUE)
+		seu.integrated = FindClusters(seu.integrated, verbose = TRUE, resolution=0.2)
+		
+		cat("\tsaving to", filename,"\n")
+		save( seu.integrated, file=filename )
+		
+		markers = FindAllMarkers(seu.integrated, verbose = TRUE)
+		
+		save( markers, file=filename2 )
+	} else {
+		load(filename)
+		load(filename2)
+	}
+	return(list(seu.integrated,markers))
+}
+
+# get quake data
+get_integrated_human_data_quake <- function() {
+	filename = "human_endometrium_integrated_quake.RData"
+	
+	if( !file.exists(filename) ) {
+		seu = get_single_sample_human_data_quake()
+		
+		seu.features = SelectIntegrationFeatures(object.list = seu, nfeatures = 3000)
+		
+		cat("\tpreping integration\n")
+		seu = PrepSCTIntegration(object.list = seu, anchor.features = seu.features, verbose = TRUE)
+		
+		cat("\tfinding anchors\n")
+		#seu.anchors = FindIntegrationAnchors(object.list = seu, normalization.method = "SCT", anchor.features = seu.features, 
+		#		reference = which(names(seu) == ),verbose = TRUE)
+		
+		cat("\tintegrating\n")
+		seu.integrated = IntegrateData(anchorset = seu.anchors, normalization.method = "SCT", verbose = TRUE)
+		
+		seu.integrated = RunPCA(seu.integrated, verbose = TRUE)
+		seu.integrated = RunUMAP(seu.integrated, dims = 1:30)
+		
+		seu.integrated = FindNeighbors(seu.integrated, dims = 1:30, verbose = TRUE)
+		seu.integrated = FindClusters(seu.integrated, verbose = TRUE, resolution=0.2)
+		markers = FindAllMarkers(seu.integrated, verbose = TRUE)
+		cat("\tsaving to", filename,"\n")
+		save( seu.integrated, markers, file=filename )
+	} else {
+		cat("\tloading from", filename,"\n")
+		load(filename)
+	}
+	
+	return(list(seu.integrated ,markers))
+}
+
+
+
+# reference based CCA
+get_integrated_cellbender_seurat <- function( samples, update=F ) {
+	samples = sort(samples)
+	filename = paste( "integrated_cellbender_seurat_", paste(samples,collapse="_"),".RData", sep="" )
 	
 	if( !file.exists(filename) | update ) {
-		seu.list = get_single_sample_cellbender_seurats()[[1]]
-		
+		cat("\tloading objects\n")
+		seu.list = get_single_sample_cellbender_seurats( samples )[[1]]
+		cat("\tselecting integration features\n")
 		seu.features = SelectIntegrationFeatures(object.list = seu.list, nfeatures = 3000)
+		cat("\tpreping integration\n")
 		seu.list = PrepSCTIntegration(object.list = seu.list, anchor.features = seu.features, verbose = TRUE)
-		seu.anchors = FindIntegrationAnchors(object.list = seu.list, normalization.method = "SCT", anchor.features = seu.features, verbose = TRUE)
+		cat("\tfinding anchors\n")
+		seu.anchors = FindIntegrationAnchors(object.list = seu.list, normalization.method = "SCT", anchor.features = seu.features, 
+				reference = which(names(seu.list) == "MFCON007dcM"),verbose = TRUE)
+		cat("\tintegrating\n")
 		seu.integrated = IntegrateData(anchorset = seu.anchors, normalization.method = "SCT", verbose = TRUE)
 		
 		seu.integrated = RunPCA(seu.integrated, verbose = TRUE)
@@ -194,7 +392,7 @@ get_integrated_cellbender_seurat <- function() {
 		cat("\tloading from", filename, "\n")
 		load(filename)
 	}
-	return(seu.integrated)
+	return(list(seu.integrated,markers))
 }
 
 # run cell bender on samples in the directory
@@ -210,7 +408,7 @@ run_cellbender <- function() {
 	
 }
 
-get_cellranger_qc_output <- function() {
+get_cellranger_qc_output <- function( samples ) {
 	dm = datamap[ datamap$sample_full %in% samples, ]
 	
 	aqc = c()
@@ -222,7 +420,3 @@ get_cellranger_qc_output <- function() {
 	
 	return(aqc)
 }
-
-
-
-
