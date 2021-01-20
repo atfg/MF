@@ -120,14 +120,14 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 		gc()
 	}
 	
-	return(list(seu,markers))
-}
+	# refine some 
+	name = "MFCON007efM"
+	seu[[name]] = FindClusters(seu[[name]], verbose = TRUE, resolution=1)
+	seu[[name]]@meta.data$cell_type_cellbender_single = "stromal"
+	seu[[name]]@meta.data$cell_type_cellbender_single[seu[[name]]@meta.data$SCT_snn_res.1 %in% c(3)] = "epithelial"
+	seu[[name]]@meta.data$cell_type_cellbender_single[seu[[name]]@meta.data$SCT_snn_res.1 %i% c(1)] = "leukocytes"
+	
 # manual annotation of cell types
-#	name = "MFCON007efM"
-#	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual = NA
-#	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(0,4)] = "epithelial"
-#	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(1,2)] = "stromal"
-#	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters == 3] = "leukocytes"
 #	
 #	name = "MFCON010dfM"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual = NA
@@ -140,6 +140,106 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(0)] = "epithelial"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(3)] = "stromal"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters == 4] = "leukocytes"
+
+	return(list(seu,markers))
+}
+
+get_single_sample_seurats <- function(samples, update=F) {
+	dm = datamap[ datamap$sample_full %in% samples, ]
+	seu = list()
+	markers = list()
+	for( i in 1:nrow(dm) ) {
+		cat("\tat",dm$sample_full[i],"\n")
+		
+		filename = paste(dm$base_dir[i],"outs/seurat.RData",sep="" )
+		if( !file.exists(filename) | update ) {	
+			file = paste(dm$base_dir[i],"outs/filtered_gene_bc_matrices_h5.h5", sep="")
+			dat = Read10X_h5(filename = file, use.names = TRUE)
+			bseu = CreateSeuratObject(counts = dat)
+			rm(dat)
+			gc()
+			
+			bseu@meta.data$sample = dm$sample_full[i]
+			bseu = PercentageFeatureSet(bseu, pattern = "^MT-", col.name="percent.mt" )
+			
+			file = paste("scrna_qc_", dm$sample_full[i], ".pdf", sep="" )
+			pdf(file, width=6, height=6 )
+			
+			# filter cells 
+			a = data.frame( bseu@meta.data ) 
+			p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=paste("before filtering",name)) 
+			print(p)
+			
+			ind = a$nCount_RNA < quantile(a$nCount_RNA,probs=seq(0,1,0.01))[99] & 
+					a$nFeature_RNA < quantile(a$nFeature_RNA,probs=seq(0,1,0.01))[99] &
+					a$percent.mt < 10 &
+					a$nFeature_RNA > 100
+			bseu = bseu[,ind]
+			
+			bseu = SCTransform(bseu, verbose = TRUE)
+			bseu = RunPCA(bseu, verbose = TRUE)
+			bseu = RunUMAP(bseu, dims = 1:30, verbose = TRUE)
+			bseu = FindNeighbors(bseu, dims = 1:30, verbose = TRUE)
+			bseu = FindClusters(bseu, verbose = TRUE, resolution=1)
+			
+			bmarkers = FindAllMarkers(bseu, verbose = TRUE)
+			
+			a = data.frame( bseu@meta.data )
+			p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title=paste("after filtering",name)) 
+			print(p)
+			dev.off()
+			
+			save(bseu,bmarkers,file=filename)
+			cat("\tsaved to",filename,"\n")
+		} else{
+			cat("\tloading from", filename, "\n")
+			load(filename)
+		}
+		markers[[dm$sample_full[i]]] = bmarkers
+		seu[[dm$sample_full[i]]] = bseu
+		rm(bseu)
+		rm(bmarkers)
+		gc()
+	}
+
+	for( name in names(seu) ) {
+		seu[[name]] = FindClusters(seu[[name]], verbose = TRUE, resolution=1)
+	}
+	
+	name = "MFCON007efM"
+	seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0")] = "epithelial"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("4")] = "leukocytes"
+	
+	name = "MFCON010dfM"
+	seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
+	
+	name = "MFCON018bfM"
+	seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("1")] = "epithelial"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("2")] = "leukocytes"
+	
+	name = "MFCON020afM"
+	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0","2")] = "epithelial"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("1","3","6")] = "stromal"
+	
+	name = "MFCON007dfM" # failed?
+	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+	
+	name = "MFCON007dcM"
+	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("2")] = "leukocytes"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("0")] = "epithelial"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("1")] = "stromal"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("3")] = "endothelial"
+	
+	name = "MFCON020acM"
+	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0","2")] = "epithelial"
+	
+	return(list(seu,markers))
+}
 
 
 to_cds <- function(seud) {
@@ -233,7 +333,7 @@ get_raw_human_data <- function( samples=c("A10","A13") ) {
 	return(seu)
 }
 
-get_single_sample_human_data_quake <- function() {
+get_single_sample_quake_seurats <- function() {
 	filename = "human_endometrium_quake.RData"
 	
 	if( !file.exists(filename) ) {
@@ -282,7 +382,7 @@ get_integrated_mf_quake <- function() {
 	
 	if( !file.exists(filename) ) {
 		qsamples = c("57","19","63")
-		qseu = get_single_sample_human_data_quake()
+		qseu = get_single_sample_quake_seurats()
 		qseu = qseu[qsamples]
 		
 		samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON020afM","MFCON007dfM") 
@@ -329,7 +429,7 @@ get_integrated_human_data_quake <- function() {
 	filename = "human_endometrium_integrated_quake.RData"
 	
 	if( !file.exists(filename) ) {
-		seu = get_single_sample_human_data_quake()
+		seu = get_single_sample_quake_seurats()
 		
 		seu.features = SelectIntegrationFeatures(object.list = seu, nfeatures = 3000)
 		
@@ -376,6 +476,62 @@ get_integrated_cellbender_seurat <- function( samples, update=F ) {
 		cat("\tfinding anchors\n")
 		seu.anchors = FindIntegrationAnchors(object.list = seu.list, normalization.method = "SCT", anchor.features = seu.features, 
 				reference = which(names(seu.list) == "MFCON007dcM"),verbose = TRUE)
+		cat("\tintegrating\n")
+		seu.integrated = IntegrateData(anchorset = seu.anchors, normalization.method = "SCT", verbose = TRUE)
+		
+		seu.integrated = RunPCA(seu.integrated, verbose = TRUE)
+		seu.integrated = RunUMAP(seu.integrated, dims = 1:30)
+		
+		seu.integrated = FindNeighbors(seu.integrated, dims = 1:30, verbose = TRUE)
+		seu.integrated = FindClusters(seu.integrated, verbose = TRUE, resolution=0.2)
+		markers = FindAllMarkers(seu.integrated, verbose = TRUE)
+		
+		save(seu.integrated, markers, file=filename)
+		cat("\tsaved to",filename,"\n")
+	} else{
+		cat("\tloading from", filename, "\n")
+		load(filename)
+	}
+	
+	seu.integrated@meta.data$donor = names(seu)[as.numeric(sapply(strsplit(colnames(seu.integrated),"_"),"[[",2))]
+	seu.integrated@meta.data$type = "flow"
+	seu.integrated@meta.data$type[substr( seu.integrated@meta.data$sample, 10, 10) == "c"] = "clumps"
+	for( res in c(0.1,0.4,0.6,0.8,1) ) {
+		seu.integrated = FindClusters(seu.integrated, verbose = TRUE, resolution=res)
+	}
+	seu.integrated@meta.data$cell_type_level1 = NA
+	ind = as.character(seu.integrated@meta.data$integrated_snn_res.0.2)
+	seu.integrated@meta.data$cell_type_level1[ind %in% c("0","1","5")] = "epithelial"
+	seu.integrated@meta.data$cell_type_level1[ind %in% c("2","3","4")] = "stromal"
+	seu.integrated@meta.data$cell_type_level1[ind %in% c("6")] = "leukocytes"
+	
+	seu.integrated@meta.data$cell_type_level2 = NA
+	ind = as.character(seu.integrated@meta.data$integrated_snn_res.0.2)
+	seu.integrated@meta.data$cell_type_level2[ind == "0"] = "glands"
+	seu.integrated@meta.data$cell_type_level2[ind == "1"] = "exhausted glands"
+	seu.integrated@meta.data$cell_type_level2[ind == "5"] = "cilliated glands"
+	seu.integrated@meta.data$cell_type_level2[ind == "2"] = "decidualised stroma"
+	seu.integrated@meta.data$cell_type_level2[ind == "3"] = "stroma/mesenchyme"
+	seu.integrated@meta.data$cell_type_level2[ind == "4"] = "smooth muscle"
+	seu.integrated@meta.data$cell_type_level2[ind == "6"] = "T-cells"
+	
+	return(list(seu.integrated,markers))
+}
+
+get_integrated_seurat <- function( samples, update=F ) {
+	samples = sort(samples)
+	filename = paste( "integrated_seurat_", paste(samples,collapse="_"),".RData", sep="" )
+	
+	if( !file.exists(filename) | update ) {
+		cat("\tloading objects\n")
+		seu.list = get_single_sample_seurats( samples )[[1]]
+		cat("\tselecting integration features\n")
+		seu.features = SelectIntegrationFeatures(object.list = seu.list, nfeatures = 3000)
+		cat("\tpreping integration\n")
+		seu.list = PrepSCTIntegration(object.list = seu.list, anchor.features = seu.features, verbose = TRUE)
+		cat("\tfinding anchors\n")
+		seu.anchors = FindIntegrationAnchors(object.list = seu.list, normalization.method = "SCT", anchor.features = seu.features, 
+				reference = which(names(seu.list) == "MFCON007dcM"),verbose = TRUE, k.filter=103)
 		cat("\tintegrating\n")
 		seu.integrated = IntegrateData(anchorset = seu.anchors, normalization.method = "SCT", verbose = TRUE)
 		
