@@ -140,7 +140,7 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(0)] = "epithelial"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters %in% c(3)] = "stromal"
 #	seu[[name]]@meta.data$cell_type_seurat_clusters_0.2_manual[seu[[name]]@meta.data$seurat_clusters == 4] = "leukocytes"
-
+	
 	return(list(seu,markers))
 }
 
@@ -201,42 +201,40 @@ get_single_sample_seurats <- function(samples, update=F) {
 		rm(bmarkers)
 		gc()
 	}
-
+	
 	for( name in names(seu) ) {
 		seu[[name]] = FindClusters(seu[[name]], verbose = TRUE, resolution=1)
 	}
 	
-	name = "MFCON007efM"
-	seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0")] = "epithelial"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("4")] = "leukocytes"
-	
-	name = "MFCON010dfM"
-	seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
-	
-	name = "MFCON018bfM"
-	seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("1")] = "epithelial"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("2")] = "leukocytes"
-	
-	name = "MFCON020afM"
-	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0","2")] = "epithelial"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("1","3","6")] = "stromal"
-	
-	name = "MFCON007dfM" # failed?
-	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
-	
-	name = "MFCON007dcM"
-	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("2")] = "leukocytes"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("0")] = "epithelial"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("1")] = "stromal"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("3")] = "endothelial"
-	
-	name = "MFCON020acM"
-	seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
-	seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0","2")] = "epithelial"
+	cat( "\tsetting cell types\n")
+	for( name in names(seu) ) {
+		if( name == "MFCON007efM" ) {
+			seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0")] = "epithelial"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("4")] = "leukocytes"
+		} else if( name == "MFCON010dfM" ) {
+			seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
+		} else if( name == "MFCON018bfM" ) {
+			seu[[name]]@meta.data$cell_type_single_cellbender = "stromal"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("1")] = "epithelial"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("2")] = "leukocytes"	
+		} else if( name == "MFCON020afM" ) {
+			seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0","2")] = "epithelial"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("1","3","6")] = "stromal"
+		} else if( name == "MFCON007dfM" ) { # failed?
+			seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+		} else if( name == "MFCON007dcM" ) {
+			seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("2")] = "leukocytes"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("0")] = "epithelial"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("1")] = "stromal"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.0.2 %in% c("3")] = "endothelial"
+		} else if( name == "MFCON020acM" ) {
+			seu[[name]]@meta.data$cell_type_single_cellbender = "unknown"
+			seu[[name]]@meta.data$cell_type_single_cellbender[seu[[name]]@meta.data$SCT_snn_res.1 %in% c("0","2")] = "epithelial"	
+		}
+	}
 	
 	return(list(seu,markers))
 }
@@ -424,6 +422,39 @@ get_integrated_mf_quake <- function() {
 	return(list(seu.integrated,markers))
 }
 
+get_single_sample_tormo_seurats <- function() {
+	file = "endometrium_all_seurat.RData"
+	
+	if( !file.exists(file) ) {
+		filename = "/icgc/dkfzlsdf/analysis/B210/data/sanger_human_endometrium/endometrium_all.h5ad"
+		dat = Read10X_h5(filename, use.names = TRUE, unique.features = TRUE)
+		
+		meta = h5read( filename, "/obs" )
+		rownames(meta) = meta$index
+		var = h5read( filename, "/var" )
+		counts = h5read( filename, "/X" )
+		colnames(counts) = meta$index
+		rownames(counts) = var$index
+		rvt_umap = h5read( filename, "/obsm" )
+		
+		map = h5read( filename, "/uns" )
+		for( name in c("batch","clinical","clusters","day","individual","leiden","location","phase","sample","treatment","type") ) {
+			meta[,name] = map[[paste(name,"categories",sep="_")]][as.factor(meta[,name])]
+		}
+		meta$rvt_UMAP1 = rvt_umap$X_umap[1,]
+		meta$rvt_UMAP2 = rvt_umap$X_umap[2,]
+		rm(rvt_umap)
+		
+		seu = CreateSeuratObject( counts, project = "HumanBiopsies", assay = "RNA", min.cells = 0, 
+				min.features = 0, names.field = 1, names.delim = "_", meta.data = meta )
+		save(seu,file=file)	
+	} else {
+		load( file )
+	}
+	return(seu)
+	
+}
+
 # get quake data
 get_integrated_human_data_quake <- function() {
 	filename = "human_endometrium_integrated_quake.RData"
@@ -493,6 +524,7 @@ get_integrated_cellbender_seurat <- function( samples, update=F ) {
 		load(filename)
 	}
 	
+	browser()
 	seu.integrated@meta.data$donor = names(seu)[as.numeric(sapply(strsplit(colnames(seu.integrated),"_"),"[[",2))]
 	seu.integrated@meta.data$type = "flow"
 	seu.integrated@meta.data$type[substr( seu.integrated@meta.data$sample, 10, 10) == "c"] = "clumps"
