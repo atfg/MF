@@ -125,7 +125,7 @@ get_single_sample_cellbender_seurats <- function(samples, update=F) {
 	seu[[name]] = FindClusters(seu[[name]], verbose = TRUE, resolution=1)
 	seu[[name]]@meta.data$cell_type_cellbender_single = "stromal"
 	seu[[name]]@meta.data$cell_type_cellbender_single[seu[[name]]@meta.data$SCT_snn_res.1 %in% c(3)] = "epithelial"
-	seu[[name]]@meta.data$cell_type_cellbender_single[seu[[name]]@meta.data$SCT_snn_res.1 %i% c(1)] = "leukocytes"
+	seu[[name]]@meta.data$cell_type_cellbender_single[seu[[name]]@meta.data$SCT_snn_res.1 %in% c(1)] = "leukocytes"
 	
 # manual annotation of cell types
 #	
@@ -335,11 +335,11 @@ get_single_sample_quake_seurats <- function() {
 	filename = "human_endometrium_quake.RData"
 	
 	if( !file.exists(filename) ) {
-		qseu = readRDS("/icgc/dkfzlsdf/analysis/B210/references_data/GSE111976_ct_endo_10x.rds")
-		meta = read.table("/icgc/dkfzlsdf/analysis/B210/references_data/GSE111976_summary_10x_day_donor_ctype.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
+		qseu = readRDS("/omics/groups/OE0433/internal/references_data/GSE111976_ct_endo_10x.rds")
+		meta = read.table("/omics/groups/OE0433/internal/references_data/GSE111976_summary_10x_day_donor_ctype.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
 		rownames(meta) = meta$X
 		meta = meta[,-1]
-		phase = read.table("/icgc/dkfzlsdf/analysis/B210/references_data/GSE111976_summary_10x_donor_phase.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
+		phase = read.table("/omics/groups/OE0433/internal/references_data/GSE111976_summary_10x_donor_phase.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
 		meta$phase = phase[match(meta$donor,phase$donor),"phase_canonical"]
 		meta$donor = as.character(meta$donor)
 		
@@ -524,8 +524,7 @@ get_integrated_cellbender_seurat <- function( samples, update=F ) {
 		load(filename)
 	}
 	
-	browser()
-	seu.integrated@meta.data$donor = names(seu)[as.numeric(sapply(strsplit(colnames(seu.integrated),"_"),"[[",2))]
+	seu.integrated@meta.data$donor = substr(seu.integrated@meta.data$sample,1,9)
 	seu.integrated@meta.data$type = "flow"
 	seu.integrated@meta.data$type[substr( seu.integrated@meta.data$sample, 10, 10) == "c"] = "clumps"
 	for( res in c(0.1,0.4,0.6,0.8,1) ) {

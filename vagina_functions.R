@@ -180,7 +180,8 @@ get_joined_endometrium_vagina <- function( update=F ) {
 	return( seu )
 }
 
-# 3 endometriums, all vaginas, all MFs, using one endometrium and one vagina as reference
+# integrate 3 endometriums, all vaginas, all MFs; using one endometrium and one vagina as reference for CCA
+# return a list with a seurat object and the list of cluster markers
 get_integrated_endometrium_vagina_mf <- function(update=F) {
 	filename = "integrated_endometrium_vagina_mf.RData"
 	filename2 = "integrated_endometrium_vagina_mf_markers.RData"

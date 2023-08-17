@@ -1,5 +1,5 @@
 # change to your own working directory
-dir = "/icgc/dkfzlsdf/analysis/B210/angela/mf/"
+dir = "/omics/groups/OE0433/internal/angela/mf/"
 # set to your preferred screen width
 options(width=230)
 
@@ -9,14 +9,14 @@ setwd(dir)
 # Load libraries 
 ###############################################################################
 
-.libPaths(paste("/icgc/dkfzlsdf/analysis/B210/software/R-library-",paste(R.version$major,R.version$minor,sep="."),sep=""))
+.libPaths(paste("/omics/groups/OE0433/internal/software/R-library-",paste(R.version$major,R.version$minor,sep="."),sep=""))
 
 library("Seurat")
 #library("pagoda2")
-library("velocyto.R")
 library("RColorBrewer")
-library("dplyr")
 library("ggplot2")
+library("velocyto.R")
+library("dplyr")
 library("garnett")
 library("org.Hs.eg.db")
 library("rhdf5")
@@ -27,6 +27,7 @@ library("rhdf5")
 #library("devtools")
 #devtools::install_github("cole-trapnell-lab/garnett")
 
+source("/omics/groups/OE0433/internal/angela/atfg_github/MF/functions.R")
 
 ###############################################################################
 # Set up some useful global variables 
@@ -36,7 +37,7 @@ datamap = data.frame( batch=c(rep("jun17",3),"all","org","10xDemo1","all","aug17
 		sample_full=c("MFCON007efM","MFCON010dfM","MFCON018bfM","MFmg","orga","pbmc4k","MFpg","MFCON020afM","MFCON007dfM","MFCON007dcM","MFCON020acM"), 
 		run=c(rep(23156,3),"",21346,"10xPBMC","aggregate","24192-25608","24192-25608","24192-25608","24192-25608"), 
 		lane=c(6,7,8,"6-7-8",NA,"4k",NA,"4839STDY7131581","4839STDY7131582","4839STDY7131583","4839STDY7131584"),
-		root="/icgc/dkfzlsdf/analysis/B210/data/mf/",
+		root="/omics/groups/OE0433/internal/data/mf/",
 		filter_ngenes = c(5200), filter_percent.mito = c(0.3), nPCs=c(5), stringsAsFactors=F, 
 		nPC = c(11,11,5,NA,NA,NA,NA,11,11,20,11),
 		maxPC = c(50,50,20,NA,NA,NA,NA,50,50,50,50),
@@ -89,7 +90,7 @@ goi = list( cilia = c("TUBA1A", "CTH", "EZR","FOXJ1"),
 		nk_mucosal=c("ITGAE"),
 		tcells=c("ITGAE","CD69","CXCR4","CD8A", "CD8B", "CD4"),
 		apoptosis=c("CASP3"),
-		ovary_specific=c("MUM1L1","RBP1","CDH11","NCAM1"),
+		ovary_specific=c("OVGP1","MUM1L1","RBP1","CDH11","NCAM1"),
 		endometrium_specific=c("MME"),
 		up_fallopian_vs_endometrium=c("FMO3"),
 		up_endometrium_vs_fallopian=c("DMBT1"),
@@ -129,7 +130,6 @@ dissociation_effects=c('ACTG1','ANKRD1','ARID5A','ATF3','ATF4','BAG3','BHLHE40',
 		'TRA2A','TRA2B','TRIB1','TUBB4B','TUBB6','UBC','USP2','WAC','ZC3H12A','ZFAND5','ZFP36',
 		'ZFP36L1','ZFP36L2','ZYX','GADD45G','HSPE1','IER5','KCNE4')
 
-source("/icgc/dkfzlsdf/analysis/B210/angela/atfg_github/MF/functions.R")
 
 # module load R/3.5.2, don't have to do this, it is the default, doesn't work from inside screen
 # module load python/3.6.1 # this is required for Seurat to run

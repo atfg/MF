@@ -1,5 +1,13 @@
 >epithelial
-expressed: EPCAM, PAEP, PAX8, MUC16
+expressed: EPCAM, MUC16, CDH1, CLDN10
+
+>luminal
+subtype of: epithelial
+
+>glandular
+subtype of: epithelial
+
+PAEP, PAX8
 
 >ciliated
 expressed: CTH, EZR, FOXJ1
