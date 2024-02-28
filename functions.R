@@ -422,6 +422,83 @@ get_integrated_mf_quake <- function() {
 	return(list(seu.integrated,markers))
 }
 
+# read in EPFL data
+get_endoCounts <- function( normalized=FALSE ) {
+	# read in endometriosis count table
+	cat("\treading counts\n")
+	tab = read.table("STAR-HTSeqTags.-Jun18.counts.txt", check.names=F)
+	tab = tab[rowSums(tab) > 0,]
+	
+	# create metadata from column names
+	cat("\tcreating metadata\n")
+	meta = data.frame( id=sapply(strsplit(colnames(tab),".",fixed=T),"[[",1),
+			endo_stage=as.numeric(sapply(strsplit(colnames(tab),".",fixed=T),"[[",2)),
+			contraceptive=sapply(strsplit(colnames(tab),".",fixed=T),"[[",3),
+			cell_type=sapply(strsplit(colnames(tab),".",fixed=T),"[[",4),
+			index=as.numeric(sapply(strsplit(colnames(tab),".",fixed=T),"[[",5)) )
+	meta$endo_stage[is.na(meta$endo_stage)] = 0
+	meta$endo = meta$endo_stage != 0
+	meta$endo_stage = factor(meta$endo_stage)
+	rownames(meta) = colnames(tab)
+	#a = read.table("ex_vivo_samples.txt",stringsAsFactors=F)[,1]
+	meta$type = "ex_vivo"
+	
+	a = read.table("in_vitro_samples.txt",stringsAsFactors=F)[,1]
+	meta[a,"type"] = "in_vitro"
+	
+	cat("\tgetting gene symbols\n")
+	annot = getAnnotation()
+	
+	a = annot[match(rownames(tab),annot$hs_ensembl_gene_id),"gene"]
+	ind = !is.na(a)
+	tab = tab[ind,]
+	a = a[ind]
+	
+	ind = !duplicated(a)
+	tab = tab[ind,]
+	a = a[ind]
+	
+	rownames(tab) = a
+	
+	if( normalized ) {
+		cat("\tnormalizing\n")
+		library("DESeq2")
+		
+		de = DESeqDataSetFromMatrix(countData = tab, colData = meta, design= ~ endo )
+		de = estimateSizeFactors(de)
+		tab = counts(de, normalized=TRUE)
+	}
+	
+	return(list(counts=tab,meta=meta))
+}
+
+getAnnotation <- function( update=F ) {
+	filename = "2023_annotation.RData"
+	
+	if( file.exists(filename) & !update ) {
+		cat("loading annotation from", filename, "\n")
+		load( filename )
+	} else {
+		library("biomaRt")
+		# human 
+		ensembl = useMart(host="http://jul2018.archive.ensembl.org/", "ENSEMBL_MART_ENSEMBL")
+		ensembl = useDataset(mart=ensembl, "hsapiens_gene_ensembl")
+		
+		cat("downloading human annotation\n")
+		annot = getBM(mart=ensembl, attributes = c("chromosome_name", "ensembl_gene_id", "external_gene_name", "strand", 
+						"start_position", "end_position", "gene_biotype"))
+		annot$chromosome_name = paste("chr",annot$chromosome_name,sep="")
+		annot = annot[annot$chromosome_name %in% paste("chr",c(1:22,"X","Y"),sep=""),]
+		colnames(annot) = paste("hs_",colnames(annot),sep="")
+		annot$gene = annot$hs_external_gene_name
+		
+		cat("\tsaving to", filename,"\n")
+		save(annot,file=filename)
+	}
+	
+	return(annot)
+}
+
 get_single_sample_tormo_seurats <- function() {
 	file = "endometrium_all_seurat.RData"
 	
