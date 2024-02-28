@@ -331,11 +331,43 @@ get_raw_human_data <- function( samples=c("A10","A13") ) {
 	return(seu)
 }
 
+# only grch38 
+get_gene_name_from_synonym <- function( gnames ) {
+	syn = read.table("gene_name_synonyms_grch38.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
+	a = data.frame(orig=gnames,name=syn$Gene.name[match(gnames,syn$Gene.name)],syn=syn$Gene.name[match(gnames,syn$Gene.Synonym)])
+	nnames = a$name
+	nnames[is.na(nnames)] = a$syn[is.na(nnames)]
+	
+#	syn = read.table("gene_name_synonyms_grch37.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
+#	a = cbind(a,data.frame(name37=syn$Gene.name[match(a$orig,syn$Gene.name)],syn37=syn$Gene.name[match(a$orig,syn$Gene.Synonym)]))
+	
+	return(nnames)
+}
+
 get_single_sample_quake_seurats <- function() {
 	filename = "human_endometrium_quake.RData"
 	
 	if( !file.exists(filename) ) {
 		qseu = readRDS("/omics/groups/OE0433/internal/references_data/GSE111976_ct_endo_10x.rds")
+		a = rowSums(qseu)
+		qseu = qseu[ a > 0, ]
+		
+		gnames = get_gene_name_from_synonym(rownames(qseu))
+		ind = !is.na(gnames)
+		
+		gnames = gnames[ind]
+		qseu = qseu[ind,]
+		rownames(qseu) = gnames
+		
+		ind = which( rownames(qseu) %in% rownames(qseu)[duplicated(rownames(qseu))] )
+		a = qseu[ind,]
+		ind = !(rownames(qseu) %in% rownames(a))
+		qseu = qseu[ind,]
+		
+		a = a[order(rowSums(a),decreasing=T),]
+		a = a[!duplicated(rownames(a)),]
+		qseu = rbind(qseu,a)
+		
 		meta = read.table("/omics/groups/OE0433/internal/references_data/GSE111976_summary_10x_day_donor_ctype.csv",stringsAsFactors=F,fill=T,sep=",",header=T)
 		rownames(meta) = meta$X
 		meta = meta[,-1]
@@ -379,6 +411,7 @@ get_integrated_mf_quake <- function() {
 	filename2 = "integrated_mf_quake_markers.RData"
 	
 	if( !file.exists(filename) ) {
+		# select quake samples
 		qsamples = c("57","19","63")
 		qseu = get_single_sample_quake_seurats()
 		qseu = qseu[qsamples]

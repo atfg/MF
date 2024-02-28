@@ -6,7 +6,7 @@
 
 # this loads up libraries, sets up some global varibles and functions 
 # and loads up the seurat objects created by Luca so takes a few minutes to run
-source("/omics/groups/OE0433/internal//angela/atfg_github/MF/initialise_env.R")
+source("/omics/groups/OE0433/internal/angela/atfg_github/MF/initialise_env.R")
 
 samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM") 
 #"MFCON020afM","MFCON007dfM" are failed samples
@@ -208,7 +208,7 @@ for( cluster in unique(imarkers$cluster) ) {
 dev.off()
 
 file = paste("scrna_umaps_cellbender_integrated_clusters_", paste(samples,collapse="_"), "_markers.pdf", sep="" )
-pdf(file, width=6, height=5 )
+pdf(file, width=7, height=3 )
 Idents(iseu) = iseu@meta.data$cell_type_level2
 features = c("PAEP","EZR","NEAT1","VMP1","CD69","GNLY","NKG7","IGFBP1","LEFTY2","CLDN10","SPP1","MGP","VIM","COL12A1")
 VlnPlot(iseu, features = features, stack=T, pt.size=0)
@@ -513,6 +513,12 @@ dev.off()
 # DE between quake and MF
 ###############################################################################
 
+samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
+a = get_integrated_cellbender_seurat( samples, update=F )
+iseu = a[[1]]
+rm(a)
+gc()
+
 a = get_integrated_mf_quake()
 seu.integrated = a[[1]]
 markers = a[[2]]
@@ -544,7 +550,6 @@ a$cell_type_level1[grepl("Lymphocytes|Macrophages|T-cells",a$cell_type)] = "leuk
 a$cell_type_level1[grepl("Endothelia|muscle",a$cell_type)] = "endothelial"
 
 seu.integrated@meta.data = a
-
 
 dat = seu.integrated[["RNA"]]@counts
 ndat = c()
@@ -599,6 +604,7 @@ for( ct in c("stromal","epithelial","leukocytes") ) {
 	ares[[ct]] = res
 	write.table(res[,c("gene","log2FoldChange")],file=paste0("comparison_quake_DE_",ct,".rnk"),quote=F,row.names=F,col.names=F,sep="\t")
 }
+save(ares,file="comparison_quake_DE_genes.RData")
 
 pdf("comparison_quake_DE.pdf")
 for( ct in c("stromal","epithelial","leukocytes") ) {
@@ -608,94 +614,25 @@ for( ct in c("stromal","epithelial","leukocytes") ) {
 }
 dev.off()
 
+# check how many genes and if the same genes...
+annot = getAnnotation()
+
 
 # there's a error - GNB2L1 and RACK1 are the exact same gene
 
 
 
-###############################################################################
-# Deconvolve EPFL data using our samples or Quake's
-#
-# module unload R; module unload python; module load python/3.7.0 anaconda3/2019.07 libpng/1.6.37 hdf5/1.8.18 python/3.6.1 gdal/3.0.2 R/4.2.0 gcc/7.2.0; R
-#module unload R; module load python/3.7.0 anaconda3/2019.07 libpng/1.6.37 hdf5/1.8.18 python/3.6.1 gdal/3.0.2 R/4.0.0; R
-###############################################################################
-
-dir = "/omics/groups/OE0433/internal/angela/mf/"
-options(width=230)
-setwd(dir)
-.libPaths(paste("/omics/groups/OE0433/internal/software/R-library-",paste(R.version$major,R.version$minor,sep="."),sep=""))
-
-# read in count table
-tab = read.table("STAR-HTSeqTags.-Jun18.counts.txt", check.names=F)
-
-# read in metadata
-meta = data.frame( id=sapply(strsplit(colnames(tab),".",fixed=T),"[[",1),
-		endo_stage=as.numeric(sapply(strsplit(colnames(tab),".",fixed=T),"[[",2)),
-		contraceptive=sapply(strsplit(colnames(tab),".",fixed=T),"[[",3),
-		cell_type=sapply(strsplit(colnames(tab),".",fixed=T),"[[",4),
-		unknown=as.numeric(sapply(strsplit(colnames(tab),".",fixed=T),"[[",5)) )
-meta$endo_stage[is.na(meta$endo_stage)] = 0
-meta$endo_stage = factor(meta$endo_stage)
-
-# which method to use?
-
-library("DeconRNASeq")
-library("DEseq2")
-
-de = DESeqDataSetFromMatrix(countData = tab, colData = meta, design= ~ endo_stage)
-de = estimateSizeFactors(de)
-ntab = counts(de, normalized=TRUE)
-
-
-res = DeconRNASeq(as.data.frame(ndat), as.data.frame(ref))
-
-a = t(apply( res$out.all, 1, function(x) {  } ))
-
-
-##
-
-samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
-a = get_integrated_cellbender_seurat( samples, update=F )
-seu.integrated = a[[1]]
-imarkers = a[[2]]
-rm(a)
-gc()
-
-a = data.frame( Embeddings(seu.integrated[["umap"]]), seu.integrated@meta.data ) 
-a$type = "biopsy"
-a$type[is.na( a$donor)] = "mf"
-b = rownames(seu.integrated@meta.data)
-nn = b
-nn[grepl("_6",b)] = sub("_6","_1",b[grepl("_6",b)])
-nn[grepl("_7",b)] = sub("_7","_2",b[grepl("_7",b)])
-nn[grepl("_8",b)] = sub("_8","_4",b[grepl("_8",b)])
-nn[grepl("_9",b)] = sub("_9","_5",b[grepl("_9",b)])
-nn[grepl("_4",b)] = sub("_4","_6",b[grepl("_4",b)])
-nn[grepl("_5",b)] = sub("_5","_7",b[grepl("_5",b)])
-rownames(a) = nn
-mfm = iseu@meta.data
-mfm = mfm[ mfm$sample != "MFCON018bfM",]
-a$ct_qu = a$cell_type
-a$ct_mf[match(rownames(mfm),rownames(a))] = mfm$cell_type_level2
-#a$cell_type[match(rownames(mfm),rownames(a))] = mfm$cell_type_level1
-a$cell_type[match(rownames(mfm),rownames(a))] = mfm$cell_type_level2
-a$donor[match(rownames(mfm),rownames(a))] = mfm$sample
-a$cell_type_level1[grepl("Ciliated|cilliated|epithelial|epithelia|glands",a$cell_type)] = "epithelial"
-a$cell_type_level1[grepl("Stroma|stroma",a$cell_type)] = "stromal"
-a$cell_type_level1[grepl("Lymphocytes|Macrophages|T-cells",a$cell_type)] = "leukocytes"
-a$cell_type_level1[grepl("Endothelia|muscle",a$cell_type)] = "endothelial"
-
-seu.integrated@meta.data = a
-
-
-dat = seu.integrated[["RNA"]]@counts
-ndat = c()
-a = seu.integrated@meta.data
-for( ct in unique(a$cell_type_level1) ) {
-	for(donor in unique(a$donor) ) {
-		ndat = cbind(ndat, rowSums(dat[,a$cell_type_level1 == ct & a$donor == donor]) )
-		colnames(ndat)[ncol(ndat)] = paste(donor,ct,sep="_")
-	}
+# only grch38 
+get_gene_name_from_synonym <- function( gnames ) {
+	syn = read.table("gene_name_synonyms_grch38.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
+	a = data.frame(orig=gnames,name=syn$Gene.name[match(gnames,syn$Gene.name)],syn=syn$Gene.name[match(gnames,syn$Gene.Synonym)])
+	nnames = a$name
+	nnames[is.na(nnames)] = a$syn[is.na(nnames)]
+	
+#	syn = read.table("gene_name_synonyms_grch37.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
+#	a = cbind(a,data.frame(name37=syn$Gene.name[match(a$orig,syn$Gene.name)],syn37=syn$Gene.name[match(a$orig,syn$Gene.Synonym)]))
+	
+	return(nnames)
 }
 
 
