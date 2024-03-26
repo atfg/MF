@@ -344,6 +344,123 @@ get_gene_name_from_synonym <- function( gnames ) {
 	return(nnames)
 }
 
+get_single_sample_gregersen_seurats <- function( update=F ) {
+	meta = read.table("/omics/groups/OE0433/internal/references_data/GSE203191/GSE203191_Shih_endo_meta_frame.tsv", stringsAsFactors=F, header=T, sep="\t")
+	
+	basedir = "/omics/groups/OE0433/internal/references_data/GSE203191"
+	files = dir(basedir, pattern=".h5", full.names=T )
+	names(files) = sapply( strsplit( sapply(strsplit( sub("_filtered_feature_bc_matrix.h5","", files ),"/",fixed=T),"[[",8), "[0-9]_" ), "[[", 2 )
+	
+	gseu = list()
+	for( i in 1:length(files) ) {
+		file = files[i]
+		cat( "\tat", file, "\n" )
+		filename = sub(".h5", "_seurat.RData", file, fixed=T )
+		
+		if( !file.exists(filename) | update ) {	
+			cat("\treading in h5\n")
+			dat = Read10X_h5(filename = file, use.names = TRUE)
+			bseu = CreateSeuratObject(counts = dat)
+			rm(dat)
+			gc()
+			
+			cat("\tadding metadata\n")
+			smeta = meta[meta$run == names(files)[i],]
+			bseu@meta.data = cbind(bseu@meta.data, smeta[match(rownames(bseu@meta.data), smeta$barcode),] )
+			bseu@meta.data$run = names(files)[i]
+			
+			cat("\tpercent mitochondria\n")
+			bseu = PercentageFeatureSet(bseu, pattern = "^MT-", col.name="percent.mt" )
+			
+			ifile = paste("scrna_qc_gregersen_", names(files)[i], ".pdf", sep="" )
+			cat("\tplotting QC to", ifile, "\n")
+			pdf(ifile, width=6, height=6 )
+			
+			a = data.frame( bseu@meta.data ) 
+			p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title="before filtering") 
+			print(p)
+			
+			cat("\tfilter cells\n")
+			ind = a$nCount_RNA < quantile(a$nCount_RNA,probs=seq(0,1,0.01))[99] & 
+					a$nFeature_RNA < quantile(a$nFeature_RNA,probs=seq(0,1,0.01))[99] &
+					a$percent.mt < 10 &
+					a$nFeature_RNA > 100
+			bseu = bseu[,ind]
+			
+			cat("\tSCTransform, PCA, UMAP, Neighbours, Clusters\n")
+			bseu = SCTransform(bseu, verbose = TRUE)
+			bseu = RunPCA(bseu, verbose = TRUE)
+			bseu = RunUMAP(bseu, dims = 1:30, verbose = TRUE)
+			bseu = FindNeighbors(bseu, dims = 1:30, verbose = TRUE)
+			bseu = FindClusters(bseu, verbose = TRUE, resolution=1)
+			
+			a = data.frame( bseu@meta.data )
+			p = ggplot( a, aes(nFeature_RNA,nCount_RNA, color=percent.mt) ) + geom_point(alpha=0.3, shape=20) + theme_bw() + labs(title="after filtering") 
+			print(p)
+			dev.off()
+			
+			cat("\tsaving\n")
+			save(bseu,file=filename)
+			cat("\tsaved to",filename,"\n")
+		} else{
+			cat("\tloading from", filename, "\n")
+			load(filename)
+		}	
+		gseu[[names(files)[i]]] = bseu
+		rm(bseu)
+		gc()
+	}
+	return(gseu)
+}
+
+gregersen_clusterID_to_cell_type <- function( ids ) {
+	cell_type = rep(NA,length(ids))
+	cell_type[ids %in% c("B","CD4T","CD8T1","CD8T2","CD8T3","CD8T4","Granulocyte","Myeloid1","Myeloid2","Myeloid3","uNK1","uNK2","pDC")] = "immune"
+	cell_type[ids %in% c("EC-like")] = "EC"
+	cell_type[ids %in% c("Epithelial1","Epithelial2","Epithelial3")] = "epithelial"
+	cell_type[ids %in% c("Stromal")] = "stromal"
+	
+	return(cell_type)
+}
+
+gregersen_clusterID_to_cell_type_level_2 <- function( ids ) {
+	cell_type = tolower(ids)
+	cell_type[ids %in% c("CD4T","CD8T1","CD8T2","CD8T3","CD8T4")] = "T"
+	cell_type[ids %in% c("Myeloid1","Myeloid2","Myeloid3")] = "myeloid"
+	cell_type[ids %in% c("uNK1","uNK2")] = "uNK"
+	cell_type[ids %in% c("EC-like")] = "EC"
+	cell_type[ids %in% c("Epithelial1","Epithelial2","Epithelial3")] = "epithelial"
+	cell_type[ids %in% c("Stromal")] = "stromal"
+	
+	return(cell_type)
+}
+
+get_pseudocounts_gregersen <- function( seu ) {
+	dat = c()
+	for( sample in names(seu) ) {
+		seu[[sample]]@meta.data$cell_type = gregersen_clusterID_to_cell_type( seu[[sample]]@meta.data$clusterID )
+		cts = unique(seu[[sample]]@meta.data$cell_type)
+		cts = cts[!is.na(cts)]
+		for( ct in cts ) {
+			donors = unique(seu[[sample]]@meta.data$subjectID)
+			donors = donors[!is.na(donors)]
+			for( donor in donors ) {
+				ind = seu[[sample]]@meta.data$cell_type %in% ct & seu[[sample]]@meta.data$subjectID %in% donor
+				if( sum(ind) > 1 ) {
+					a = rowSums(seu[[sample]][["RNA"]]@counts[,ind])
+					dat = cbind(dat,a)
+					colnames(dat)[ncol(dat)] = paste(sample,donor,ct,sep="-")		
+				}
+			}
+		}
+	}
+	dat = dat[rowSums(dat) > 0,]
+	
+	return(dat)
+}
+
+
+
 get_single_sample_quake_seurats <- function() {
 	filename = "human_endometrium_quake.RData"
 	

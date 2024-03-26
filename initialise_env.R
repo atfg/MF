@@ -82,7 +82,8 @@ goi = list( cilia = c("TUBA1A", "CTH", "EZR","FOXJ1"),
 		gargett_menstrual_blood_ercs=c("TERT","POU5F1","SSEA4","NANOG"), # MSCs or stromal fibroblasts, STRO-1 has no gene symbol because no seq is available
 		proliferation=c("MKI67"), # not expressed
 		differentiation=c("PAEP","SPP1", "17HSDB2", "LIF"),
-		stromal_decidualisation = c("IGFBP1","PRL","PRLR","MMP3","MMP9","LEFTY2","FOXO1","IL15"), # PRLR is mainly expressed in epithelial cells (IRF1)
+		stromal_decidualisation = c("IGFBP1","PRL","PRLR","MMP3","MMP9","LEFTY2","FOXO1","IL15","HAND2","HAND2-AS1"), # PRLR is mainly expressed in epithelial cells (IRF1)
+		quake_stromal_decidualisation = c("CRYAB","S100A4","DKK1","FOXO1","IL15","FGF7","LMCD1"),
 		epithelial_decidualisation = c("PRLR","IRF1","FOXO1"),
 		decidualisation_warren = c("IGFBP1", "SST", "PRL", "BCL2L11", "WNT5A", "FOXO1"),
 		leukocytes=c("PTPRC","HLA-B"),

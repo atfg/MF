@@ -13,6 +13,22 @@ samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM
 
 
 ###############################################################################
+# cell-type ratioss
+###############################################################################
+
+ratios = list(
+MFCON020afM = c(1000,8000,2000),
+MFCON020acM = c(1450,7000,2000),
+MFCON007dfM = c(3587,6000,1000),
+MFCON007dcM = c(5911,4000,1000),
+MFCON018bfM = c(658,8500,1500),
+MFCON010dfM = c(1199,8000,1300),
+MFCON007efM = c(2591,6500,1500) )
+ratios = sapply(ratios, identity )       
+rownames(ratios) = c("cd45m_epcamp","cd45m_epcamm","cd45p")
+apply(ratios,2,function(x) { x/sum(x) } )
+
+###############################################################################
 # plots and clustering sample by sample
 ###############################################################################
 samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
@@ -287,7 +303,8 @@ gc()
 
 a = data.frame( Embeddings(seu.integrated[["umap"]]), seu.integrated@meta.data ) 
 a$type = "biopsy"
-a$type[is.na( a$donor)] = "mf"
+a$type[grepl( "MF", a$donor)] = "mf"
+
 b = rownames(seu.integrated@meta.data)
 nn = b
 nn[grepl("_6",b)] = sub("_6","_1",b[grepl("_6",b)])
@@ -297,6 +314,7 @@ nn[grepl("_9",b)] = sub("_9","_5",b[grepl("_9",b)])
 nn[grepl("_4",b)] = sub("_4","_6",b[grepl("_4",b)])
 nn[grepl("_5",b)] = sub("_5","_7",b[grepl("_5",b)])
 rownames(a) = nn
+
 mfm = iseu@meta.data
 mfm = mfm[ mfm$sample != "MFCON018bfM",]
 a$ct_qu = a$cell_type
@@ -323,7 +341,7 @@ pdf("comparison_quake_proportions.pdf")
 ggplot(b,aes(Var.2,value,fill=Var.1)) + geom_col() + theme_classic()
 dev.off()
 
-pdf("temp.pdf", width=2*6, height=6 )
+pdf("comparison_quake_umap.pdf", width=2*6, height=6 )
 ggplot(a,aes(UMAP_1,UMAP_2,color=integrated_snn_res.0.2)) + geom_point() + theme_bw()
 ggplot(a,aes(UMAP_1,UMAP_2,color=cell_type_level1)) + geom_point() + theme_bw() + cols1_scale
 ggplot(a,aes(UMAP_1,UMAP_2,color=cell_type_level1)) + geom_point() + theme_bw() + facet_wrap( ~ type ) + cols1_scale
@@ -354,8 +372,8 @@ tab = as.data.frame(tab)
 tab$X1 = factor(tab$X1,levels=c("epithelial_mf","stromal_mf","leukocytes_mf"),ordered=T)
 tab$X2 = factor(tab$X2,levels=c("epithelial_biopsy","stromal_biopsy","leukocytes_biopsy","endothelial_biopsy","smooth muscle_biopsy"),ordered=T)
 
-pdf("temp.pdf", width=2*6, height=6 )
-ggplot(tab,aes(X2,X1,fill=value)) + geom_tile() + theme_bw() + scale_fill_distiller()
+pdf("comparison_quake_correlation_heatmap.pdf", width=2*6, height=6 )
+ggplot(tab,aes(X2,X1,fill=value)) + geom_tile() + theme_bw() + scale_fill_viridis_c()
 dev.off()
 
 ggplot(dat,aes(stromal_biopsy,stromal_mf)) + geom_point() + theme_bw()
@@ -525,6 +543,7 @@ markers = a[[2]]
 rm(a)
 gc()
 
+# replace seu.integrated metadata with a better version
 a = data.frame( Embeddings(seu.integrated[["umap"]]), seu.integrated@meta.data ) 
 a$type = "biopsy"
 a$type[is.na( a$donor)] = "mf"
@@ -537,6 +556,7 @@ nn[grepl("_9",b)] = sub("_9","_5",b[grepl("_9",b)])
 nn[grepl("_4",b)] = sub("_4","_6",b[grepl("_4",b)])
 nn[grepl("_5",b)] = sub("_5","_7",b[grepl("_5",b)])
 rownames(a) = nn
+
 mfm = iseu@meta.data
 mfm = mfm[ mfm$sample != "MFCON018bfM",]
 a$ct_qu = a$cell_type
@@ -551,6 +571,7 @@ a$cell_type_level1[grepl("Endothelia|muscle",a$cell_type)] = "endothelial"
 
 seu.integrated@meta.data = a
 
+# create table of pseudocounts
 dat = seu.integrated[["RNA"]]@counts
 ndat = c()
 a = seu.integrated@meta.data
@@ -561,6 +582,7 @@ for( ct in unique(a$cell_type_level1) ) {
 	}
 }
 
+# plot PCA of table of pseudo-counts
 ind = rowSums(ndat >= 3) >=3
 sdat = log10(ndat[ind,]+1)
 sdevs = apply(sdat,1,sd)
@@ -574,6 +596,7 @@ a$sample = sapply(strsplit(rownames(a),"_"),"[[",1)
 
 pdf("comparison_quake_pseudocount_PCA.pdf", width=4, height=4)
 ggplot(a,aes(PC1,PC2,color=type)) + geom_point() + theme_classic()
+ggplot(a,aes(PC1,PC2,color=ct)) + geom_point() + theme_classic()
 
 ggplot(a,aes(PC2,PC3,color=type)) + geom_point() + theme_classic()
 ggplot(a,aes(PC2,PC3,color=ct)) + geom_point() + theme_classic()
@@ -582,6 +605,7 @@ ggplot(a,aes(PC3,PC4,color=type)) + geom_point() + theme_classic()
 ggplot(a,aes(PC3,PC4,color=ct)) + geom_point() + theme_classic()
 dev.off()
 
+# do DE
 library("DESeq2")
 library("ggrepel")
 library("apeglm")
@@ -592,7 +616,8 @@ for( ct in c("stromal","epithelial","leukocytes") ) {
 	ind = grepl(ct,rownames(a))
 	dat = ndat[,ind]
 	# filtering is quite important
-	dat = dat[rowSums(dat > 0) >= 3,]
+	dat = dat[rowSums( ndat[,a$type == "biopsy"] ) > 0 & rowSums( ndat[,a$type == "MF"] ) > 0,]
+	#dat = dat[rowSums(dat > 0) >= 3,]
 	de = DESeqDataSetFromMatrix(countData = dat, colData = a[ind,], design= ~ type)
 	de = DESeq(de)
 	
@@ -606,33 +631,27 @@ for( ct in c("stromal","epithelial","leukocytes") ) {
 }
 save(ares,file="comparison_quake_DE_genes.RData")
 
+goi = list( GOBP_EXTRACELLULAR_MATRIX_DISASSEMBLY=read.table("GOBP_EXTRACELLULAR_MATRIX_DISASSEMBLY.txt",stringsAsFactors=F)[,1],
+		HALLMARK_INFLAMMATORY_RESPONSE=read.table("HALLMARK_INFLAMMATORY_RESPONSE.txt",stringsAsFactors=F)[,1],
+		KEGG_CYTOKINE_CYTOKINE_RECEPTOR_INTERACTION=read.table("KEGG_CYTOKINE_CYTOKINE_RECEPTOR_INTERACTION.txt",stringsAsFactors=F)[,1])
+
 pdf("comparison_quake_DE.pdf")
 for( ct in c("stromal","epithelial","leukocytes") ) {
 	tab = as.data.frame(ares[[ct]])
-	p = ggplot(tab,aes(log10(baseMean),log2FoldChange,label=gene)) + geom_point(alpha=0.5) + geom_text_repel(data=tab[c(1:15,(nrow(tab)-15):nrow(tab)),], max.overlaps = Inf) + theme_classic() + ggtitle(ct)
+	tab$pathway = NA
+	tab$top = FALSE
+	tab$top[c(1:10,(nrow(tab)-10):nrow(tab))] = TRUE
+	tab$top[ -log10(tab$padj) >= 30] = TRUE
+	for(pathway in names(goi) ) {
+		tab$pathway[tab$gene %in% goi[[pathway]] & tab$padj < 0.05] = pathway 
+	}
+	tab = tab[rev(order(is.na(tab$pathway))),]
+	
+	p = ggplot(tab,aes(log10(baseMean),log2FoldChange,label=gene)) + geom_point(alpha=0.5) + geom_text_repel(data=tab[tab$top,], max.overlaps = Inf) + theme_classic() + ggtitle(ct)
+	print(p)
+	
+	p = ggplot(tab,aes(log2FoldChange,-log10(padj),label=gene,color=pathway)) + geom_point(alpha=0.5) + geom_text_repel(data=tab[tab$top,], max.overlaps = Inf) + theme_classic() + ggtitle(ct)
 	print(p)
 }
 dev.off()
-
-# check how many genes and if the same genes...
-annot = getAnnotation()
-
-
-# there's a error - GNB2L1 and RACK1 are the exact same gene
-
-
-
-# only grch38 
-get_gene_name_from_synonym <- function( gnames ) {
-	syn = read.table("gene_name_synonyms_grch38.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
-	a = data.frame(orig=gnames,name=syn$Gene.name[match(gnames,syn$Gene.name)],syn=syn$Gene.name[match(gnames,syn$Gene.Synonym)])
-	nnames = a$name
-	nnames[is.na(nnames)] = a$syn[is.na(nnames)]
-	
-#	syn = read.table("gene_name_synonyms_grch37.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
-#	a = cbind(a,data.frame(name37=syn$Gene.name[match(a$orig,syn$Gene.name)],syn37=syn$Gene.name[match(a$orig,syn$Gene.Synonym)]))
-	
-	return(nnames)
-}
-
 
