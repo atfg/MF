@@ -13,16 +13,7 @@ source("/omics/groups/OE0433/internal//angela/atfg_github/MF/initialise_env.R")
 # Volume of EPFL data
 ###############################################################################
 
-meta2 = read.csv( "BRBseq_Endo_290518.ext.csv" )
-meta2$Endo.stage = as.numeric(meta2$Endo.stage)
-meta2$Endo.stage[is.na(meta2$Endo.stage)] = 0
-meta2$Endo.stage = factor(meta2$Endo.stage)
-meta2 = meta2[order(meta2$Endo.stage,meta2$ID),]
-meta2$ID = factor( meta2$ID, ordered=T, levels=unique(meta2$ID) )
-meta2$Age = as.numeric(meta2$Age)
-meta2$endo = meta2$Endo.stage != "0"
-smeta = meta[match(meta2$allI,rownames(meta)),]
-meta2$type = smeta$type
+meta2 = get_metadata_epfl()
 
 # number of low versus high volume samples
 table(sapply( split( meta2$cells, paste( meta2$Sample.date, meta2$ID ) ), function(x) { all(x == "all") } ))
@@ -142,7 +133,7 @@ res = res[order(abs(res$log2FoldChange),decreasing=T),]
 sres = res[res$padj < 0.05,]
 dat = counts(de,normalized=TRUE)
 goi = rownames(sres)[1:10]
-dat = data.frame(meta,t(dat[goi,]))
+#dat = data.frame(meta,t(dat[goi,]))
 res$gene = rownames(res)
 sum(res$padj < 0.05)
 
@@ -152,7 +143,7 @@ save( res_all, dat_all, file="DE_results_all.RData" )
 
 load("DE_results_all.RData" )
 res = res_all
-dat = dat_all
+#dat = dat_all
 res$gene = rownames(res)
 sres = res[res$padj < 0.05,]
 goi = rownames(sres)[1:10]
@@ -369,6 +360,10 @@ a = data.frame(gene=rownames(res_stromal_in_vitro),logfc=res_stromal_in_vitro$lo
 a = a[order(a$logfc,decreasing=T),]
 write.table(a,file="endo_DE_stromal_in_vitro.rnk",row.names=FALSE,col.names=FALSE, quote=F,sep="\t")
 
+a = rownames(res_stromal_in_vitro)[res_stromal_in_vitro$padj < 0.05 & res_stromal_in_vitro$log2FoldChange > 0]
+write.table(a,file="endo_DE_stromal_in_vitro_sig_up.txt",row.names=FALSE,col.names=FALSE, quote=F,sep="\t")
+a = rownames(res_stromal_in_vitro)[res_stromal_in_vitro$padj < 0.05 & res_stromal_in_vitro$log2FoldChange < 0]
+write.table(a,file="endo_DE_stromal_in_vitro_sig_down.txt",row.names=FALSE,col.names=FALSE, quote=F,sep="\t")
 
 dec = unique(c(goi$stromal_decidualisation,goi$decidualisation_warren,goi$roser_decidual_stromal,goi$quake_stromal_decidualisation))
 a = res_stromal_in_vitro[dec,]
@@ -391,9 +386,31 @@ heatmap.2(as.matrix(dat), trace="none", scale="row",cexRow=1/log10(nrow(dat))-0.
 		ColSideColors=cc, Colv=F )
 dev.off()
 
+# look at decidualised genes
+a = unlist(goi)
+a = a[grepl("deci",names(a))]
+a = unique(a)
+b = res_stromal_in_vitro[a,]
+b = b[b$pvalue < 0.05,]
 
-
-
+# quake genes peaking in stroma at decidualization
+library("gplots")
+pdf("endo_DE_stromal_in_vitro_heatmap_quake_decidua.pdf", width=6, height=6)
+a = read.table("quake_genes_peaking_phase_4_stromal.txt")[,1]
+b = res_stromal_in_vitro[a,]
+b = b[b$padj < 0.05,]
+b = b[!is.na(b[,1]),]
+dec = unique(c(goi$stromal_decidualisation,goi$decidualisation_warren,goi$roser_decidual_stromal,goi$quake_stromal_decidualisation))
+dec = c(dec[ res[dec,"pvalue"] < 0.05 ],rownames(b))
+dec = unique(dec)
+cc = c("black","red")[as.numeric(factor(colData(de)$endo))]
+ind = order(cc)
+dat = dat_stromal_in_vitro
+dat = dat[dec,ind]
+cc = cc[ind]
+heatmap.2(as.matrix(dat), trace="none", scale="row",cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10),
+		ColSideColors=cc, Colv=F )
+dev.off()
 
 ############################
 # leukocytes ex vivo
@@ -401,7 +418,21 @@ dev.off()
 # 1607 genes significant
 ############################
 
-ind = meta$cell_type == "Cd45p" & meta$type == "ex_vivo"
+library("DESeq2")
+
+dat = get_endoCounts(normalized=FALSE)
+tab = dat$counts
+meta = dat$meta
+rm(dat)
+gc()
+
+# remove one cd45p ex vivo endometriosis sample that has bad contamination from stromal cells
+# determined by deconvolution "2976.2.0.Cd45p.37"
+bad = "2976.2.0.Cd45p.37"
+a = props_level_2$Est.prop.weighted
+a[bad,]
+
+ind = meta$cell_type == "Cd45p" & meta$type == "ex_vivo" & (rownames(meta) != bad)
 table( meta[ind,"endo"] )
 de = DESeqDataSetFromMatrix(countData = tab[,ind], colData = meta[ind,], design= ~ endo )
 de = DESeq(de)
@@ -421,6 +452,11 @@ sres = res_leukocytes_ex_vivo[ res_leukocytes_ex_vivo$padj < 0.05,]
 a = data.frame(gene=rownames(res_leukocytes_ex_vivo),logfc=res_leukocytes_ex_vivo$log2FoldChange)
 a = a[order(a$logfc,decreasing=T),]
 write.table(a,file="endo_DE_leukocytes_ex_vivo.rnk",row.names=FALSE,col.names=FALSE, quote=F,sep="\t")
+
+a = rownames(res_leukocytes_ex_vivo)[res_leukocytes_ex_vivo$padj < 0.05 & res_leukocytes_ex_vivo$log2FoldChange > 0]
+write.table(a,file="endo_DE_leukocytes_ex_vivo_sig_up.txt",row.names=FALSE,col.names=FALSE, quote=F,sep="\t")
+a = rownames(res_leukocytes_ex_vivo)[res_leukocytes_ex_vivo$padj < 0.05 & res_leukocytes_ex_vivo$log2FoldChange < 0]
+write.table(a,file="endo_DE_leukocytes_ex_vivo_sig_down.txt",row.names=FALSE,col.names=FALSE, quote=F,sep="\t")
 
 
 pdf("endo_DE_leukocytes_ex_vivo.pdf", width=3, height=3)
@@ -481,7 +517,6 @@ cc = cc[ind]
 heatmap.2(as.matrix(dat), trace="none", scale="row",cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10),
 		ColSideColors=cc, Colv=F )
 dev.off()
-
 
 
 # leukocytes vitro - makes no sense
@@ -645,131 +680,212 @@ dev.off()
 # DE compare the 3 models
 ###############################################################################
 
-load("DE_results_all.RData" )
+meta = get_metadata_epfl()
+load( "DE_results_all.RData" )
 load( "DE_results_leukocytes_ex_vivo.RData" )
-load( "DE_results_stromal.RData" )
+load( "DE_results_stromal_in_vitro.RData" )
 
 s1 = rownames(res_all)[res_all$padj < 0.05]
 s2 = rownames(res_leukocytes_ex_vivo)[res_leukocytes_ex_vivo$padj < 0.05]
-s3 = rownames(res_stromal)[res_stromal$padj < 0.05]
+s3 = rownames(res_stromal_in_vitro)[res_stromal_in_vitro$padj < 0.05]
 
 sort(table(c(s1,s2,s3)),decreasing=T)[1:10]
 
 gene = "ORM2"
 res_all[gene,]
 res_leukocytes_ex_vivo[gene,]
-res_stromal[gene,]
+res_stromal_in_vitro[gene,]
 
+res_all[c("TNF","MMP9","TIMP1"),]
+res_leukocytes_ex_vivo[c("TNF","MMP9","TIMP1"),]
+res_stromal_in_vitro[c("TNF","MMP9","TIMP1"),]
 
-###############################################################################
-# Deconvolve EPFL data using our samples or Quake's
-#
-# module unload R; module unload python; module load python/3.7.0 anaconda3/2019.07 libpng/1.6.37 hdf5/1.8.18 python/3.6.1 gdal/3.0.2 R/4.2.0 gcc/7.2.0; R
-# module unload R; module load python/3.7.0 anaconda3/2019.07 libpng/1.6.37 hdf5/1.8.18 python/3.6.1 gdal/3.0.2 R/4.0.0; R
-###############################################################################
-
-dir = "/omics/groups/OE0433/internal/angela/mf/"
-options(width=230)
-setwd(dir)
-.libPaths(paste("/omics/groups/OE0433/internal/software/R-library-",paste(R.version$major,R.version$minor,sep="."),sep=""))
-
-library("DeconRNASeq")
-library("DESeq2")
-
-dat = get_endoCounts(normalized=TRUE)
-tab = dat$counts
-meta = dat$meta
-rm(dat)
-gc()
-
-# read in reference counts
-load("mf_counts_deconvolute.RData")
-ref = sdat[,grepl("MFCON007dcM",colnames(sdat)) & !grepl("endothelial",colnames(sdat))]
-
-
-sref = ref[rownames(stab),] 
-
-de = DESeqDataSetFromMatrix(countData = cbind(stab,sref), colData = data.frame(exp=c(rep("endo",ncol(stab)),rep("mf",ncol(sref)))), design= ~ exp)
-de = estimateSizeFactors(de)
-ntab = counts(de, normalized=TRUE)
-
-
-res = DeconRNASeq(as.data.frame(ntab[rownames(ntab)%in%unique(unlist(goi)),colnames(stab)]), as.data.frame(ntab[rownames(ntab)%in%unique(unlist(goi)),colnames(sref)]))
-a = t(res$out.all)
-colnames(a) = colnames(stab)
-
-b = ntab[,colnames(sref)]
-b = data.frame(GeneSymbol=rownames(b),b)
-write.table(b,file="temp_ref.txt",sep="\t",quote=F,row.names=F)      
-
-b = ntab[,colnames(stab)]
-b = data.frame(GeneSymbol=rownames(b),b)
-write.table(b,file="temp_mix.txt",sep="\t",quote=F,row.names=F)      
-
-
-##
-
-samples = c("MFCON007dcM","MFCON020acM","MFCON007efM","MFCON010dfM","MFCON018bfM","MFCON020afM","MFCON007dfM") 
-a = get_integrated_cellbender_seurat( samples, update=F )
-seu.integrated = a[[1]]
-imarkers = a[[2]]
-rm(a)
-gc()
-
-a = data.frame( Embeddings(seu.integrated[["umap"]]), seu.integrated@meta.data ) 
-a$type = "biopsy"
-a$type[is.na( a$donor)] = "mf"
-b = rownames(seu.integrated@meta.data)
-nn = b
-nn[grepl("_6",b)] = sub("_6","_1",b[grepl("_6",b)])
-nn[grepl("_7",b)] = sub("_7","_2",b[grepl("_7",b)])
-nn[grepl("_8",b)] = sub("_8","_4",b[grepl("_8",b)])
-nn[grepl("_9",b)] = sub("_9","_5",b[grepl("_9",b)])
-nn[grepl("_4",b)] = sub("_4","_6",b[grepl("_4",b)])
-nn[grepl("_5",b)] = sub("_5","_7",b[grepl("_5",b)])
-rownames(a) = nn
-mfm = iseu@meta.data
-mfm = mfm[ mfm$sample != "MFCON018bfM",]
-a$ct_qu = a$cell_type
-a$ct_mf[match(rownames(mfm),rownames(a))] = mfm$cell_type_level2
-#a$cell_type[match(rownames(mfm),rownames(a))] = mfm$cell_type_level1
-a$cell_type[match(rownames(mfm),rownames(a))] = mfm$cell_type_level2
-a$donor[match(rownames(mfm),rownames(a))] = mfm$sample
-a$cell_type_level1[grepl("Ciliated|cilliated|epithelial|epithelia|glands",a$cell_type)] = "epithelial"
-a$cell_type_level1[grepl("Stroma|stroma",a$cell_type)] = "stromal"
-a$cell_type_level1[grepl("Lymphocytes|Macrophages|T-cells",a$cell_type)] = "leukocytes"
-a$cell_type_level1[grepl("Endothelia|muscle",a$cell_type)] = "endothelial"
-
-seu.integrated@meta.data = a
-
-
-dat = seu.integrated[["RNA"]]@counts
-ndat = c()
-a = seu.integrated@meta.data
-for( ct in unique(a$cell_type_level1) ) {
-	for(donor in unique(a$donor) ) {
-		ndat = cbind(ndat, rowSums(dat[,a$cell_type_level1 == ct & a$donor == donor]) )
-		colnames(ndat)[ncol(ndat)] = paste(donor,ct,sep="_")
+ora = c()
+for( ct in c("stromal_in_vitro", "leukocytes_ex_vivo") ) {
+	for( direction in c("up","down") ) {
+		for( gs in c("reactome", "msigdb") ) {
+			a = read.table(paste0("endo_DE_", ct, "_sig_", direction, "_enrichr_", gs, ".txt"), sep="\t", header=T)
+			a$ct = ct
+			a$dir = direction
+			a$gs = gs
+			ora = rbind(ora,a)
+		}
 	}
 }
-sdat = ndat[,grepl("MF",colnames(ndat))]
-sdat = sdat[rowSums(sdat)>0,]
+ora = ora[order(ora$Adjusted.P.value),]
+
+###############################################################################
+# DE heatmap with pathways stromal in vitro
+###############################################################################
+
+library("gplots")
+meta = get_metadata_epfl()
+
+maxpath = 12-1
+maxgenes = 156
+sora = ora[ ora$ct == "stromal_in_vitro" & ora$Adjusted.P.value < 0.05 & ora$gs == "msigdb",]
+sora = rbind( sora[sora$dir == "up",][1:3,], sora[sora$dir == "down",][1:(maxpath-3),] )
+oratab = unlist(apply( sora, 1, function(x) { paste(strsplit(x["Genes"],";")[[1]],x["Term"],sep="_") } ))
+oratab = data.frame( gene=sapply(strsplit(oratab,"_"),"[[",1),  path=sapply(strsplit(oratab,"_"),"[[",2) )       
+
+res = res_stromal_in_vitro
+
+dec = read.table("quake_genes_peaking_phase_4_stromal.txt")[,1]
+dec = unique(c(dec,goi$stromal_decidualisation,goi$decidualisation_warren,goi$roser_decidual_stromal,goi$quake_stromal_decidualisation))
+dec = dec[dec %in% res$gene[res$padj < 0.05]]
+oratab = rbind(oratab,data.frame(gene=dec,path="decidualization"))
+
+gg = sample(oratab$gene, min(nrow(oratab),150))
+gg = c(gg,rownames(res)[order(res$padj)][1:60])
+gg = c(gg,rownames(res)[order(abs(res$log2FoldChange),decreasing=T)][1:60])
+gg = unique(gg)
+length(gg)
+
+res = res[ rownames(res) %in% gg,]
+dat = dat_stromal_in_vitro[rownames(res),]
+smeta = meta[match( colnames(dat), meta$allI ),]
+rownames(smeta) = colnames(dat)
+smeta$cc = c("black","red")[as.numeric(smeta$endo)+1]
+ind = order(smeta$cc)
+dat = dat[,ind]
+smeta = smeta[ind,]
+
+gtab = data.frame( gene=rownames(dat), path=oratab$path[match(rownames(dat),oratab$gene)] )
+gtab$col = brewer.pal(maxpath, "Paired")[as.numeric(factor(gtab$path))]
+gtab$col[is.na(gtab$col)] = "black"
+
+na.rm <- TRUE
+scaleRow <- function(x) {
+	rm <- rowMeans(x, na.rm = na.rm)
+	x <- sweep(x, 1, rm)
+	sx <- apply(x, 1, sd, na.rm = na.rm)
+	x <- sweep(x, 1, sx, "/")
+	return(round(x, 6))
+}
+a = scaleRow(dat)
+ind = order(gtab$col,-1*apply(a[,smeta$endo],1,median),decreasing=F)
+dat = dat[ind,]
+gtab = gtab[ind,]
+
+pdf("endo_DE_stromal_in_vitro_heatmap.pdf", width=3, height=2*5)
+heatmap.2(as.matrix(dat), trace="none", scale="row", cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10), RowSideColors=gtab$col, ColSideColors=smeta$cc, Colv=F, Rowv=F )
+heatmap.2(as.matrix(dat), trace="none", scale="row", cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10), RowSideColors=gtab$col, ColSideColors=smeta$cc, Colv=T, Rowv=T )
+dev.off()
 
 
-##############
+###############################################################################
+# DE heatmap with pathways leukocytes ex vivo
+###############################################################################
 
-save(sdat,file="mf_counts_deconvolute.RData")
+library("gplots")
+library("RColorBrewer")
+meta = get_metadata_epfl()
+load( "DE_results_leukocytes_ex_vivo.RData" )
 
-load("mf_counts_deconvolute.RData")
-de = DESeqDataSetFromMatrix(countData = sdat, colData = data.frame(cell_type=sapply(strsplit(colnames(sdat),"_"),"[[",2)), design= ~ cell_type)
-de = estimateSizeFactors(de)
-sdat = counts(de, normalized=TRUE)
+maxpath = 12
+sora = ora[ ora$ct == "leukocytes_ex_vivo" & ora$Adjusted.P.value < 0.05 & ora$gs == "msigdb",]
+sora = rbind( sora[sora$dir == "up",][1:3,], sora[sora$dir == "down",][1:(maxpath-3),] )
+oratab = unlist(apply( sora, 1, function(x) { paste(strsplit(x["Genes"],";")[[1]],x["Term"],sep="_") } ))
+oratab = data.frame( gene=sapply(strsplit(oratab,"_"),"[[",1),  path=sapply(strsplit(oratab,"_"),"[[",2) )       
+
+res = res_leukocytes_ex_vivo
+
+gg = rownames(res)[order(res$padj)][1:10]
+gg = c(gg,rownames(res)[order(abs(res$log2FoldChange),decreasing=T)][1:10])
+gg = unique(c(gg, sample(oratab$gene, 170 ) ))
+length(gg)
+
+res = res[ rownames(res) %in% gg,]
+#res = res[order(res$padj),]
+#res = res[res$padj < 0.05,][1:256,]
+dat = dat_leukocytes_ex_vivo[rownames(res),]
+smeta = meta[match( colnames(dat), meta$allI ),]
+rownames(smeta) = colnames(dat)
+smeta["4210.4.0.Cd45p.24","endo"] = TRUE
+smeta$cc = c("black","red")[as.numeric(smeta$endo)+1]
+ind = order(smeta$cc)
+dat = dat[,ind]
+smeta = smeta[ind,]
+
+gtab = data.frame( gene=rownames(dat), path=oratab$path[match(rownames(dat),oratab$gene)] )
+gtab$col = brewer.pal(maxpath, "Paired")[as.numeric(factor(gtab$path))]
+gtab$col[is.na(gtab$col)] = "black"
+
+na.rm <- TRUE
+scaleRow <- function(x) {
+	rm <- rowMeans(x, na.rm = na.rm)
+	x <- sweep(x, 1, rm)
+	sx <- apply(x, 1, sd, na.rm = na.rm)
+	x <- sweep(x, 1, sx, "/")
+	return(round(x, 6))
+}
+a = scaleRow(dat)
+ind = order(gtab$col,-1*apply(a[,smeta$endo],1,median),decreasing=F)
+dat = dat[ind,]
+gtab = gtab[ind,]
+
+pdf("endo_DE_leukocytes_ex_vivo_heatmap.pdf", width=3, height=2*5)
+heatmap.2(as.matrix(dat), trace="none", scale="row", cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10), RowSideColors=gtab$col, ColSideColors=smeta$cc, Colv=F, Rowv=F )
+heatmap.2(as.matrix(dat), trace="none", scale="row", cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10), RowSideColors=gtab$col, ColSideColors=smeta$cc, Colv=T, Rowv=T )
+dev.off()
 
 
-res = DeconRNASeq(as.data.frame(ndat), as.data.frame(ref[,grepl("MFCON007dcM",colnames(ref))]))
-a = t(res$out.all)
-head(a)
+###############################################################################
+# DE heatmap all samples
+###############################################################################
 
+library("gplots")
+library("RColorBrewer")
+
+meta = get_metadata_epfl()
+a = load( "DE_results_all.RData" )
+
+#maxpath = 12
+#sora = ora[ ora$ct == "leukocytes_ex_vivo" & ora$Adjusted.P.value < 0.05 & ora$gs == "msigdb",]
+#sora = rbind( sora[sora$dir == "up",][1:3,], sora[sora$dir == "down",][1:(maxpath-3),] )
+#oratab = unlist(apply( sora, 1, function(x) { paste(strsplit(x["Genes"],";")[[1]],x["Term"],sep="_") } ))
+#oratab = data.frame( gene=sapply(strsplit(oratab,"_"),"[[",1),  path=sapply(strsplit(oratab,"_"),"[[",2) )       
+
+res = res_all
+
+#gg = rownames(res)[order(res$padj)][1:10]
+#gg = c(gg,rownames(res)[order(abs(res$log2FoldChange),decreasing=T)][1:10])
+#gg = unique(c(gg, sample(oratab$gene, 170 ) ))
+#length(gg)
+
+#res = res[ rownames(res) %in% gg,]
+#res = res[order(res$padj),]
+res = res[res$padj < 0.05,][1:256,]
+dat = dat_all[rownames(res),]
+smeta = meta[match( colnames(dat), meta$allI ),]
+rownames(smeta) = colnames(dat)
+smeta$cc = c("black","red")[as.numeric(smeta$endo)+1]
+ind = order(smeta$cc)
+dat = dat[,ind]
+smeta = smeta[ind,]
+
+#gtab = data.frame( gene=rownames(dat), path=oratab$path[match(rownames(dat),oratab$gene)] )
+#gtab$col = brewer.pal(maxpath, "Paired")[as.numeric(factor(gtab$path))]
+#gtab$col[is.na(gtab$col)] = "black"
+
+na.rm <- TRUE
+scaleRow <- function(x) {
+	rm <- rowMeans(x, na.rm = na.rm)
+	x <- sweep(x, 1, rm)
+	sx <- apply(x, 1, sd, na.rm = na.rm)
+	x <- sweep(x, 1, sx, "/")
+	return(round(x, 6))
+}
+a = scaleRow(dat)
+#ind = order(gtab$col,-1*apply(a[,smeta$endo],1,median),decreasing=F)
+ind = order(-1*apply(a[,smeta$endo],1,median),decreasing=F)
+dat = dat[ind,]
+#gtab = gtab[ind,]
+
+pdf("endo_DE_all_heatmap.pdf", width=3, height=2*5)
+heatmap.2(as.matrix(dat), trace="none", scale="row", cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10), ColSideColors=smeta$cc, Colv=F, Rowv=F )
+heatmap.2(as.matrix(dat), trace="none", scale="row", cexRow=1/log10(nrow(dat))-0.3, col=colorRampPalette(c("blue","white","red"))(10), ColSideColors=smeta$cc, Colv=T, Rowv=T )
+dev.off()
 
 ###############################################################################
 # plot all together

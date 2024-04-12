@@ -337,11 +337,26 @@ get_gene_name_from_synonym <- function( gnames ) {
 	a = data.frame(orig=gnames,name=syn$Gene.name[match(gnames,syn$Gene.name)],syn=syn$Gene.name[match(gnames,syn$Gene.Synonym)])
 	nnames = a$name
 	nnames[is.na(nnames)] = a$syn[is.na(nnames)]
-	
-#	syn = read.table("gene_name_synonyms_grch37.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
-#	a = cbind(a,data.frame(name37=syn$Gene.name[match(a$orig,syn$Gene.name)],syn37=syn$Gene.name[match(a$orig,syn$Gene.Synonym)]))
+		
+	#	syn = read.table("gene_name_synonyms_grch37.tsv", stringsAsFactors=F, sep="\t", header=T, comment.char="", fill=T, quote="")
+	#	a = cbind(a,data.frame(name37=syn$Gene.name[match(a$orig,syn$Gene.name)],syn37=syn$Gene.name[match(a$orig,syn$Gene.Synonym)]))
 	
 	return(nnames)
+}
+
+get_integrated_gregersen <- function() {
+	seu = get_single_sample_gregersen_seurats( update=F )
+	meta = get_metadata_gregersen()
+	
+	seu.features = SelectIntegrationFeatures(object.list = seu, nfeatures = 3000)
+	cat("\tpreping integration\n")
+	seu = PrepSCTIntegration(object.list = seu, anchor.features = seu.features, verbose = TRUE)
+	cat("\tfinding anchors\n")
+	seu.anchors = FindIntegrationAnchors(object.list = seu, normalization.method = "SCT", anchor.features = seu.features,verbose = TRUE)
+	cat("\tintegrating\n")
+	seu.integrated = IntegrateData(anchorset = seu.anchors, normalization.method = "SCT", verbose = TRUE)
+	
+	
 }
 
 get_single_sample_gregersen_seurats <- function( update=F ) {
@@ -435,13 +450,76 @@ gregersen_clusterID_to_cell_type_level_2 <- function( ids ) {
 	return(cell_type)
 }
 
+get_metadata_epfl <- function() {
+	meta2 = read.csv( "BRBseq_Endo_290518.ext.csv" )
+	meta2$Endo.stage = as.numeric(meta2$Endo.stage)
+	meta2$Endo.stage[is.na(meta2$Endo.stage)] = 0
+	meta2$Endo.stage = factor(meta2$Endo.stage)
+	meta2 = meta2[order(meta2$Endo.stage,meta2$ID),]
+	meta2$ID = factor( meta2$ID, ordered=T, levels=unique(meta2$ID) )
+	meta2$Age = as.numeric(meta2$Age)
+	meta2$endo = meta2$Endo.stage != "0"
+	smeta = meta2[match(meta2$allI,rownames(meta2)),]
+	meta2$type = smeta$type
+	
+	return(meta2)
+}
+
+get_metadata_gregersen <- function() {
+	filename = "/omics/groups/OE0433/internal/references_data/GSE203191/GSE203191_Shih_endo_meta_frame.tsv"
+	cat("reading from",filename,"\n")
+	meta = read.table(filename, stringsAsFactors=F, header=T, sep="\t")
+	meta$cell_type = gregersen_clusterID_to_cell_type( meta$clusterID )
+	meta$cell_type_level_2 = gregersen_clusterID_to_cell_type_level_2( meta$clusterID )
+	rownames(meta) = paste(meta$barcode,".",meta$run,sep="")
+	
+	return(meta)
+}
+
+# get level_3 annotation from the metadata table
+gregersen_get_level3 <- function( meta ) {
+	level_3 = meta$NKsubclusterID
+	level_3[is.na(level_3)] = meta$StromalSubclusterID[is.na(level_3)]
+	level_3[!is.na(level_3)] = paste(meta$clusterID[!is.na(level_3)],level_3[!is.na(level_3)])
+	level_3[is.na(level_3)] = meta$clusterID[is.na(level_3)]
+	return(level_3)
+} 
+
+get_pseudocounts_gregersen_level_3 <- function( seu ) {
+	dat = c()
+	for( sample in names(seu) ) {
+		cat("at", sample, "\n")
+		seu[[sample]]@meta.data$cell_type = gregersen_get_level3( seu[[sample]]@meta.data )
+		cts = unique(seu[[sample]]@meta.data$cell_type)
+		cts = cts[!is.na(cts)]
+		for( ct in cts ) {
+			cat("\tat", ct, "\n")
+			donors = unique(seu[[sample]]@meta.data$subjectID)
+			donors = donors[!is.na(donors)]
+			for( donor in donors ) {
+				ind = seu[[sample]]@meta.data$cell_type %in% ct & seu[[sample]]@meta.data$subjectID %in% donor
+				if( sum(ind) > 1 ) {
+					a = rowSums(seu[[sample]][["RNA"]]@counts[,ind])
+					dat = cbind(dat,a)
+					colnames(dat)[ncol(dat)] = paste(sample,donor,ct,sep="-")		
+				}
+			}
+		}
+	}
+	dat = dat[rowSums(dat) > 0,]
+	
+	return(dat)
+}
+
 get_pseudocounts_gregersen <- function( seu ) {
 	dat = c()
 	for( sample in names(seu) ) {
+		cat("at", sample, "\n")
 		seu[[sample]]@meta.data$cell_type = gregersen_clusterID_to_cell_type( seu[[sample]]@meta.data$clusterID )
 		cts = unique(seu[[sample]]@meta.data$cell_type)
 		cts = cts[!is.na(cts)]
 		for( ct in cts ) {
+			cat("\tat", ct, "\n")
 			donors = unique(seu[[sample]]@meta.data$subjectID)
 			donors = donors[!is.na(donors)]
 			for( donor in donors ) {
